@@ -40,7 +40,7 @@ cd ..
 ### 3. 安装依赖
 ```bash
 # 安装 PyTorch (CUDA 版本)
-pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu130
+pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126
 
 # 安装最新版 diffusers (必须从源码安装以支持 Z-Image)
 pip install --upgrade git+https://github.com/huggingface/diffusers transformers accelerate
