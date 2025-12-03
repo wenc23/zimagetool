@@ -11,7 +11,7 @@ cd ..
 
 2. 安装依赖:
 ```bash
-pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu130
+pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126
 pip install --upgrade git+https://github.com/huggingface/diffusers transformers accelerate
 ```
 
@@ -33,5 +33,6 @@ python main.py
 pip uninstall diffusers
 pip install git+https://github.com/huggingface/diffusers
 ```
+
 
 详细说明请查看 README.md 文件。
