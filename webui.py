@@ -125,6 +125,9 @@ def create_webui():
             gr.Markdown("# 🎨 Z-Image-Turbo 图片生成器")
             gr.Markdown("基于Gradio的Web界面，提供更友好的用户体验")
             
+            # 添加模型加载状态变量
+            model_loaded = gr.State(value=False)
+            
             with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown("## ⚙️ 设置")
@@ -136,7 +139,7 @@ def create_webui():
                         info="选择适合您硬件的优化模式"
                     )
                     
-                    load_btn = gr.Button("🚀 加载模型", variant="primary")
+                    load_btn = gr.Button("🚀 加载模型", variant="primary", interactive=True)
                     load_status = gr.Textbox(label="加载状态", interactive=False)
                     
                     gr.Markdown("## 📝 生成参数")
@@ -231,22 +234,39 @@ def create_webui():
                     output_status = gr.Textbox(label="生成状态", interactive=False, lines=3)
             
             # 事件处理
-            def on_load_model(optimization_mode):
+            def on_load_model(optimization_mode, is_loaded):
+                if is_loaded:
+                    return "✅ 模型已加载，无需重复加载", False, "✅ 模型已加载"
+                
                 mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
-                return load_model(mode_map[optimization_mode])
+                result = load_model(mode_map[optimization_mode])
+                if "✅ 模型加载成功" in result:
+                    return result, True, "✅ 模型已加载"
+                else:
+                    return result, False, "❌ 模型未加载"
             
             def on_generate_image(prompt, width, height, steps, filename, optimize_prompt, 
                                  art_style, character, pose, background, clothing, 
-                                 lighting, composition, details, optimization_mode):
+                                 lighting, composition, details, optimization_mode, is_loaded):
+                if not is_loaded:
+                    return None, "❌ 请先加载模型"
+                
                 mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
                 return generate_image(prompt, width, height, steps, filename, optimize_prompt,
                                     art_style, character, pose, background, clothing,
                                     lighting, composition, details, mode_map[optimization_mode])
             
+            # 更新加载按钮状态
+            def update_load_button(is_loaded):
+                if is_loaded:
+                    return gr.update(value="✅ 模型已加载", variant="secondary", interactive=False)
+                else:
+                    return gr.update(value="🚀 加载模型", variant="primary", interactive=True)
+            
             load_btn.click(
                 fn=on_load_model,
-                inputs=[optimization_dropdown],
-                outputs=[load_status]
+                inputs=[optimization_dropdown, model_loaded],
+                outputs=[load_status, model_loaded, load_btn]
             )
             
             generate_btn.click(
@@ -255,9 +275,16 @@ def create_webui():
                     prompt_input, width_slider, height_slider, steps_slider, filename_input,
                     optimize_checkbox, art_style_input, character_input, pose_input, 
                     background_input, clothing_input, lighting_input, composition_input, 
-                    details_input, optimization_dropdown
+                    details_input, optimization_dropdown, model_loaded
                 ],
                 outputs=[image_output, output_status]
+            )
+            
+            # 监听模型加载状态变化，更新按钮
+            model_loaded.change(
+                fn=update_load_button,
+                inputs=[model_loaded],
+                outputs=[load_btn]
             )
         
         return demo
@@ -271,6 +298,9 @@ def create_webui():
             gr.Markdown("# 🎨 Z-Image-Turbo 图片生成器")
             gr.Markdown("基于Gradio的Web界面，提供更友好的用户体验")
             
+            # 添加模型加载状态变量
+            model_loaded = gr.State(value=False)
+            
             with gr.Row():
                 with gr.Column():
                     gr.Markdown("## ⚙️ 设置")
@@ -281,7 +311,7 @@ def create_webui():
                         value="基础优化"
                     )
                     
-                    load_btn = gr.Button("加载模型")
+                    load_btn = gr.Button("加载模型", interactive=True)
                     load_status = gr.Textbox(label="加载状态", interactive=False)
                     
                     gr.Markdown("## 📝 生成参数")
@@ -366,22 +396,39 @@ def create_webui():
                     output_status = gr.Textbox(label="生成状态", interactive=False, lines=3)
             
             # 事件处理
-            def on_load_model(optimization_mode):
+            def on_load_model(optimization_mode, is_loaded):
+                if is_loaded:
+                    return "✅ 模型已加载，无需重复加载", False, "✅ 模型已加载"
+                
                 mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
-                return load_model(mode_map[optimization_mode])
+                result = load_model(mode_map[optimization_mode])
+                if "✅ 模型加载成功" in result:
+                    return result, True, "✅ 模型已加载"
+                else:
+                    return result, False, "❌ 模型未加载"
             
             def on_generate_image(prompt, width, height, steps, filename, optimize_prompt, 
                                  art_style, character, pose, background, clothing, 
-                                 lighting, composition, details, optimization_mode):
+                                 lighting, composition, details, optimization_mode, is_loaded):
+                if not is_loaded:
+                    return None, "❌ 请先加载模型"
+                
                 mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
                 return generate_image(prompt, width, height, steps, filename, optimize_prompt,
                                     art_style, character, pose, background, clothing,
                                     lighting, composition, details, mode_map[optimization_mode])
             
+            # 更新加载按钮状态
+            def update_load_button(is_loaded):
+                if is_loaded:
+                    return gr.update(value="✅ 模型已加载", interactive=False)
+                else:
+                    return gr.update(value="加载模型", interactive=True)
+            
             load_btn.click(
                 fn=on_load_model,
-                inputs=[optimization_dropdown],
-                outputs=[load_status]
+                inputs=[optimization_dropdown, model_loaded],
+                outputs=[load_status, model_loaded, load_btn]
             )
             
             generate_btn.click(
@@ -390,9 +437,16 @@ def create_webui():
                     prompt_input, width_slider, height_slider, steps_slider, filename_input,
                     optimize_checkbox, art_style_input, character_input, pose_input, 
                     background_input, clothing_input, lighting_input, composition_input, 
-                    details_input, optimization_dropdown
+                    details_input, optimization_dropdown, model_loaded
                 ],
                 outputs=[image_output, output_status]
+            )
+            
+            # 监听模型加载状态变化，更新按钮
+            model_loaded.change(
+                fn=update_load_button,
+                inputs=[model_loaded],
+                outputs=[load_btn]
             )
         
         return demo
