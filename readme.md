@@ -33,6 +33,7 @@ cd image
 
 ### 2. 下载模型
 ```bash
+mkdir models
 cd models
 git clone https://huggingface.co/Tongyi-MAI/Z-Image-Turbo
 cd ..
