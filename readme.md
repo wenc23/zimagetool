@@ -185,11 +185,10 @@ pip install git+https://github.com/huggingface/diffusers
 
 ## 📊 性能指标
 
-| 配置 | 生成时间 | 显存占用 | 图片质量 |
-|------|----------|----------|----------|
-| 1024x1024, 9步 | ~15-30秒 | 12-16GB | 优秀 |
-| 768x768, 9步 | ~8-15秒 | 8-12GB | 良好 |
-| 低显存模式 | ~20-40秒 | 6-10GB | 良好 |
+| 配置 | 生成时间 | 显存占用 |
+|------|----------|----------|
+| 1024x1024, 9步 | ~10秒 | 12-16GB |
+| 低显存模式 | ~20-40秒 | ~0GB |
 
 ## 🔗 相关文件
 
@@ -203,7 +202,7 @@ pip install git+https://github.com/huggingface/diffusers
 
 ## 📄 许可证
 
-本项目基于 Apache 2.0 许可证开源。
+本项目基于 MIT 许可证开源。
 
 ## 🙏 致谢
 
@@ -218,7 +217,7 @@ pip install git+https://github.com/huggingface/diffusers
 1. 查看本 README 的故障排除部分
 2. 检查模型文件是否完整下载
 3. 确认依赖包版本正确
-4. 查看 `prompt_optimizer_usage.md` 获取详细优化器使用说明
+4. 查看 `prompt_optimizer.py` 获取详细优化器使用说明
 
 ---
 
