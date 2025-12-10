@@ -44,8 +44,3 @@ def apply_low_vram_optimizations(pipe):
         pipe.enable_attention_slicing("max")
         print("✅ 已启用基本优化")
 
-def is_high_resolution(width, height):
-    """检查是否为高分辨率（大于2K）"""
-    # 2K分辨率通常指2048×1080或更高
-    # 这里我们检查任一边长大于2048或总像素数大于2K
-    return width > 2048 or height > 2048 or (width * height > 2048 * 1080)

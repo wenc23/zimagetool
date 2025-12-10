@@ -65,7 +65,7 @@ class AdvancedPromptOptimizer:
             },
             {
                 "role": "user", 
-                "content": f"请根据以上要求优化以下提示词：\n\n{original_prompt}"
+                "content": f"请根据以上要求优化以下提示词并直接返回优化后的提示词：\n\n{original_prompt}"
             }
         ]
         
