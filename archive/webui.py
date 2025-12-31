@@ -1,104 +1,41 @@
 """
 Web UI模块
-基于Gradio的Web界面 - 兼容版本
+基于Gradio的Web界面 - 重构版本
+使用公共模块优化代码结构
 """
 
 import gradio as gr
-import torch
 import time
-import threading
 from pathlib import Path
-from diffusers import ZImagePipeline
 from image_processing import save_to_gallery
-from prompt_optimizer import optimize_with_custom_input, AdvancedPromptOptimizer, PromptConfig
+from prompt_optimizer import optimize_with_custom_input
+from model_manager import model_manager, load_model, get_pipe, is_model_loaded
+from config_manager import config_manager, load_from_env
+from utils import validate_file_extension
 
-# 全局变量存储管道实例和锁
-pipe = None
-pipe_lock = threading.Lock()
-model_loaded = False
-loading_in_progress = False
 
-def is_model_loaded():
-    """检查模型是否已加载 - 全局状态检查"""
-    global model_loaded, pipe
-    return model_loaded and pipe is not None
+def load_model_ui(optimization_mode):
+    """加载模型 - Web UI版本"""
+    success, message = load_model(
+        optimization_mode=optimization_mode,
+        model_path=config_manager.get("model_path")
+    )
+    return message
 
-def load_model(optimization_mode):
-    """加载模型 - 线程安全的单例模式"""
-    global pipe, model_loaded, loading_in_progress
-    
-    # 如果模型已经加载，直接返回
-    if model_loaded and pipe is not None:
-        return f"✅ 模型已加载，无需重复加载"
-    
-    # 如果正在加载中，等待
-    if loading_in_progress:
-        return "🔄 模型正在加载中，请稍候..."
-    
-    # 获取锁，确保只有一个线程能执行加载操作
-    with pipe_lock:
-        # 再次检查，防止其他线程已经加载完成
-        if model_loaded and pipe is not None:
-            return f"✅ 模型已加载，无需重复加载"
-        
-        loading_in_progress = True
-        local_model_path = Path("models/Z-Image-Turbo")
-        
-        if not local_model_path.exists():
-            loading_in_progress = False
-            return f"❌ 错误: 模型路径不存在: {local_model_path}"
-        
-        try:
-            start_time = time.time()
-            
-            if optimization_mode == "low_vram":
-                # 低显存优化模式
-                pipe = ZImagePipeline.from_pretrained(
-                    str(local_model_path),
-                    torch_dtype=torch.bfloat16,
-                    low_cpu_mem_usage=True,
-                    local_files_only=True,
-                    offload_folder="offload",
-                )
-                
-                # 应用低显存优化
-                from optimization import apply_low_vram_optimizations
-                apply_low_vram_optimizations(pipe)
-            else:
-                # 基础优化模式
-                pipe = ZImagePipeline.from_pretrained(
-                    str(local_model_path),
-                    torch_dtype=torch.bfloat16,
-                    low_cpu_mem_usage=True,
-                    local_files_only=True,
-                    device_map="balanced",
-                )
-                
-                # 启用基本显存优化
-                pipe.enable_attention_slicing("max")
-            
-            load_time = time.time() - start_time
-            model_loaded = True
-            loading_in_progress = False
-            return f"✅ 模型加载成功! 耗时: {load_time:.2f}秒"
-            
-        except Exception as e:
-            loading_in_progress = False
-            return f"❌ 加载模型时出错: {e}"
 
-def generate_image(prompt, width, height, steps, filename, optimize_prompt, art_style, 
-                  character_description, pose_description, background_description, 
-                  clothing_description, lighting_description, composition_description, 
+def generate_image(prompt, width, height, steps, filename, optimize_prompt, art_style,
+                  character_description, pose_description, background_description,
+                  clothing_description, lighting_description, composition_description,
                   additional_details, optimization_mode):
     """生成图片 - 线程安全的生成操作"""
-    global pipe
-    
+    pipe = get_pipe()
+
     if not pipe:
         return None, "❌ 请先加载模型"
-    
+
     if not prompt:
         return None, "❌ 提示词不能为空"
-    
+
     try:
         # 优化提示词
         if optimize_prompt:
@@ -114,34 +51,35 @@ def generate_image(prompt, width, height, steps, filename, optimize_prompt, art_
                 composition=composition_description,
                 details=additional_details
             )
-        
+
         # 确保文件名格式正确
-        if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            filename += '.png'
-        
+        filename = validate_file_extension(filename)
+
         print(f"🔄 开始生成图片: {prompt}")
         start_time = time.time()
-        
-        # 生成图片 - 使用锁确保线程安全
-        with pipe_lock:
-            image = pipe(
-                prompt=prompt,
-                height=height,
-                width=width,
-                num_inference_steps=steps,
-                guidance_scale=0.0,
-            ).images[0]
-        
+
+        # 生成图片
+        image = pipe(
+            prompt=prompt,
+            height=height,
+            width=width,
+            num_inference_steps=steps,
+            guidance_scale=0.0,
+        ).images[0]
+
         gen_time = time.time() - start_time
-        
+
         # 保存图片并返回文件路径
-        gallery_folder = save_to_gallery(image, filename, prompt, width, height, steps, gen_time, optimization_mode)
-        
+        gallery_folder = save_to_gallery(
+            image, filename, prompt, width, height, steps,
+            gen_time, optimization_mode
+        )
+
         # 构建完整的文件路径
         file_path = Path(gallery_folder) / filename
         message = f"✅ 图片已保存到: {file_path}\n⏱️ 生成时间: {gen_time:.2f}秒"
         return str(file_path), message
-        
+
     except Exception as e:
         error_msg = f"❌ 生成失败: {e}"
         if "out of memory" in str(e).lower():
@@ -273,8 +211,8 @@ def create_webui():
                 if is_model_loaded():
                     return "✅ 模型已加载，无需重复加载", True, "✅ 模型已加载"
                 
-                mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
-                result = load_model(mode_map[optimization_mode])
+                mode_map = {"基础优化": "basic", "低显存优化": "low_vram"}
+                result = load_model_ui(mode_map[optimization_mode])
                 if "✅ 模型加载成功" in result:
                     return result, True, "✅ 模型已加载"
                 else:
@@ -287,7 +225,7 @@ def create_webui():
                 if not is_model_loaded():
                     return None, None, "❌ 请先加载模型"
                 
-                mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
+                mode_map = {"基础优化": "basic", "低显存优化": "low_vram"}
                 file_path, message = generate_image(prompt, width, height, steps, filename, optimize_prompt,
                                     art_style, character, pose, background, clothing,
                                     lighting, composition, details, mode_map[optimization_mode])
@@ -463,8 +401,8 @@ def create_webui():
                 if is_model_loaded():
                     return "✅ 模型已加载，无需重复加载", True, "✅ 模型已加载"
                 
-                mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
-                result = load_model(mode_map[optimization_mode])
+                mode_map = {"基础优化": "basic", "低显存优化": "low_vram"}
+                result = load_model_ui(mode_map[optimization_mode])
                 if "✅ 模型加载成功" in result:
                     return result, True, "✅ 模型已加载"
                 else:
@@ -477,7 +415,7 @@ def create_webui():
                 if not is_model_loaded():
                     return None, None, "❌ 请先加载模型"
                 
-                mode_map = {"基础优化": "base", "低显存优化": "low_vram"}
+                mode_map = {"基础优化": "basic", "低显存优化": "low_vram"}
                 file_path, message = generate_image(prompt, width, height, steps, filename, optimize_prompt,
                                     art_style, character, pose, background, clothing,
                                     lighting, composition, details, mode_map[optimization_mode])
@@ -544,16 +482,19 @@ def main():
     print("📱 访问地址: http://localhost:7860")
     print("⏹️ 按 Ctrl+C 停止服务")
     print("🔒 已启用线程安全模式，支持多客户端并发访问")
-    
+
+    # 从环境变量加载配置
+    load_from_env()
+
     demo = create_webui()
-    
+
     # 兼容不同版本的Gradio启动参数
     try:
         # 尝试使用新版本参数
         demo.launch(
             server_name="0.0.0.0",
-            server_port=7860,
-            share=False,  # 禁用分享功能，避免frpc错误
+            server_port=config_manager.get("webui_port", 7860),
+            share=config_manager.get("webui_share", False),  # 禁用分享功能，避免frpc错误
             inbrowser=True,
             max_threads=1,  # 限制并发线程数
             concurrency_limit=1  # 限制并发请求数
@@ -563,8 +504,8 @@ def main():
         print("⚠️ 检测到旧版Gradio，使用兼容启动模式...")
         demo.launch(
             server_name="0.0.0.0",
-            server_port=7860,
-            share=False,  # 禁用分享功能
+            server_port=config_manager.get("webui_port", 7860),
+            share=config_manager.get("webui_share", False),  # 禁用分享功能
             inbrowser=True
         )
 

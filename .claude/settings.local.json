@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Edit",
+      "Bash(dir:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
