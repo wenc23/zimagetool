@@ -642,32 +642,43 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- 全局主题管理 -->
     <script>
-        // 初始化主题切换
-        document.addEventListener('DOMContentLoaded', function() {
-            const themeToggle = document.getElementById('themeToggle');
+        // 主题管理器 - 在所有页面生效
+        (function() {
+            // 初始化主题
+            function initTheme() {
+                const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+                const savedTheme = localStorage.getItem('theme');
+                let theme;
 
-            // 从localStorage读取保存的主题
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            updateThemeIcon(savedTheme);
+                if (savedTheme) {
+                    theme = savedTheme;
+                } else {
+                    theme = prefersDarkScheme.matches ? 'dark' : 'light';
+                    localStorage.setItem('theme', theme);
+                }
 
-            // 主题切换功能
-            themeToggle.addEventListener('click', function() {
-                const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', theme);
+                updateThemeIcon(theme);
 
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('theme', newTheme);
-                updateThemeIcon(newTheme);
+                // 监听系统主题变化
+                prefersDarkScheme.addEventListener('change', (e) => {
+                    if (localStorage.getItem('auto-theme') === 'true') {
+                        const newTheme = e.matches ? 'dark' : 'light';
+                        document.documentElement.setAttribute('data-theme', newTheme);
+                        localStorage.setItem('theme', newTheme);
+                        updateThemeIcon(newTheme);
+                    }
+                });
+            }
 
-                showNotification(
-                    newTheme === 'dark' ? '🌙 已切换到夜间模式' : '☀️ 已切换到日间模式',
-                    'info'
-                );
-            });
-
+            // 更新主题图标
             function updateThemeIcon(theme) {
+                const themeToggle = document.getElementById('themeToggle');
+                if (!themeToggle) return;
+
                 const icon = themeToggle.querySelector('i');
                 const text = themeToggle.querySelector('span');
 
@@ -682,8 +693,24 @@
                 }
             }
 
-            // 通知函数
-            function showNotification(message, type = 'info') {
+            // 切换主题
+            function toggleTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                localStorage.setItem('auto-theme', 'false');
+                updateThemeIcon(newTheme);
+
+                showNotification(
+                    newTheme === 'dark' ? '🌙 已切换到夜间模式' : '☀️ 已切换到日间模式',
+                    'info'
+                );
+            }
+
+            // 通知函数 - 全局可访问
+            window.showNotification = function(message, type = 'info') {
                 const icons = {
                     success: 'check-circle',
                     error: 'exclamation-circle',
@@ -709,8 +736,19 @@
                         }
                     }, 300);
                 }, 3000);
+            };
+
+            // 页面加载完成后初始化
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    initTheme();
+                    document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+                });
+            } else {
+                initTheme();
+                document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
             }
-        });
+        })();
     </script>
 </body>
 </html>

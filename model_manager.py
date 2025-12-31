@@ -144,6 +144,70 @@ class ModelManager:
         self.loading_in_progress = False
         self.optimization_mode = None
 
+    def unload_model(self) -> Tuple[bool, str]:
+        """
+        卸载模型并释放显存
+
+        Returns:
+            (成功标志, 消息)
+        """
+        if not self.model_loaded:
+            return False, "⚠️ 模型未加载，无需卸载"
+
+        try:
+            import gc
+
+            # 删除模型引用
+            if self.pipe is not None:
+                # 如果模型有to()方法，先移到CPU（避免GPU显存碎片）
+                if hasattr(self.pipe, 'to'):
+                    try:
+                        self.pipe.to('cpu')
+                        print("🔄 模型已移至CPU")
+                    except:
+                        pass
+
+                # 删除各个组件
+                if hasattr(self.pipe, 'components'):
+                    for component_name in self.pipe.components:
+                        if hasattr(self.pipe, component_name):
+                            setattr(self.pipe, component_name, None)
+
+                del self.pipe
+            self.pipe = None
+
+            # 多轮垃圾回收
+            gc.collect()
+            if torch.cuda.is_available():
+                gc.collect()  # 再次GC
+                torch.cuda.empty_cache()  # 清空缓存
+                torch.cuda.synchronize()  # 同步
+                # 再次清理，确保彻底
+                torch.cuda.empty_cache()
+
+            # 重置状态
+            self.model_loaded = False
+            self.loading_in_progress = False
+            self.optimization_mode = None
+
+            # 获取显存信息
+            if torch.cuda.is_available():
+                # 等待一下让显存释放
+                import time
+                time.sleep(0.5)
+
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                free = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1024**3
+
+                return True, f"✅ 模型已卸载\n💾 显存状态: {free:.2f}GB 可用 / {total:.2f}GB 总计\n   (已分配: {allocated:.2f}GB, 已保留: {reserved:.2f}GB)"
+            else:
+                return True, "✅ 模型已卸载"
+
+        except Exception as e:
+            return False, f"❌ 卸载模型时出错: {e}"
+
 
 # 创建全局实例
 model_manager = ModelManager()
@@ -167,3 +231,8 @@ def is_model_loaded():
 def get_optimization_mode():
     """便捷函数：获取优化模式"""
     return model_manager.get_optimization_mode()
+
+
+def unload_model() -> Tuple[bool, str]:
+    """便捷函数：卸载模型"""
+    return model_manager.unload_model()

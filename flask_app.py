@@ -10,7 +10,7 @@ import time
 import threading
 import uuid
 
-from model_manager import model_manager, load_model, get_pipe, is_model_loaded
+from model_manager import model_manager, load_model, get_pipe, is_model_loaded, unload_model
 from image_processing import save_to_gallery
 from prompt_optimizer import optimize_with_custom_input
 from config_manager import config_manager
@@ -45,7 +45,7 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
             return
 
         # 更新任务状态 - 开始优化提示词
-        generation_tasks[task_id]['progress'] = 10
+        generation_tasks[task_id]['progress'] = 5
         generation_tasks[task_id]['stage'] = '优化提示词...'
 
         # 如果启用提示词优化
@@ -66,20 +66,21 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
         filename = validate_file_extension(filename)
 
         # 更新任务状态 - 开始生成
-        generation_tasks[task_id]['progress'] = 30
-        generation_tasks[task_id]['stage'] = '生成图片中...'
+        generation_tasks[task_id]['progress'] = 10
+        generation_tasks[task_id]['stage'] = '准备生成...'
         generation_tasks[task_id]['prompt'] = prompt
 
         print(f"🔄 [任务 {task_id}] 开始生成图片: {prompt}")
         start_time = time.time()
 
         # 更新进度 - 开始生成
-        generation_tasks[task_id]['progress'] = 40
-        generation_tasks[task_id]['stage'] = '生成中...'
+        generation_tasks[task_id]['progress'] = 15
+        generation_tasks[task_id]['stage'] = '初始化...'
 
         # 生成图片（带进度更新）
         def progress_callback(pipe, step, timestep, callback_kwargs):
-            progress = 40 + int((step + 1) / steps * 50)
+            # 从15%到85%，共70%用于生成过程
+            progress = 15 + int((step + 1) / steps * 70)
             generation_tasks[task_id]['progress'] = progress
             generation_tasks[task_id]['stage'] = f'生成中: {step + 1}/{steps} 步'
             return callback_kwargs  # 必须返回 callback_kwargs
@@ -102,34 +103,55 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
 
         # 尝试使用回调（如果支持）
         try:
+            print(f"🎨 [任务 {task_id}] 开始图片生成...")
             image = pipe(
                 **generation_params,
                 callback_on_step_end=progress_callback,
             ).images[0]
+            print(f"✅ [任务 {task_id}] 图片生成完成")
         except TypeError as e:
             # 如果回调参数不支持，使用不带回调的方式
             print(f"⚠️ 回调函数不支持，使用基本生成模式: {e}")
             image = pipe(**generation_params).images[0]
+            print(f"✅ [任务 {task_id}] 图片生成完成（基本模式）")
 
         gen_time = time.time() - start_time
+        print(f"⏱️ [任务 {task_id}] 生成耗时: {gen_time:.2f}秒")
 
-        # 更新任务状态 - 保存中
-        generation_tasks[task_id]['progress'] = 95
-        generation_tasks[task_id]['stage'] = '保存图片...'
+        # 更新进度 - 生成已完成，准备保存 (85%)
+        generation_tasks[task_id]['progress'] = 88
+        generation_tasks[task_id]['stage'] = '生成完成，准备保存...'
+        print(f"💾 [任务 {task_id}] 准备保存图片...")
 
         # 保存图片到画廊
-        gallery_folder = save_to_gallery(
-            image, filename, prompt, width, height, steps,
-            gen_time, optimization_mode
-        )
+        try:
+            save_start = time.time()
+            print(f"💾 [任务 {task_id}] 调用 save_to_gallery...")
+            gallery_folder = save_to_gallery(
+                image, filename, prompt, width, height, steps,
+                gen_time, optimization_mode
+            )
+            save_duration = time.time() - save_start
+            print(f"💾 [任务 {task_id}] 图片保存完成，耗时: {save_duration:.2f}秒")
+
+            # 保存完成 (92%)
+            generation_tasks[task_id]['progress'] = 92
+            generation_tasks[task_id]['stage'] = '保存完成...'
+        except Exception as save_error:
+            print(f"❌ [任务 {task_id}] 保存图片失败: {save_error}")
+            import traceback
+            traceback.print_exc()
+            raise Exception(f"保存图片失败: {str(save_error)}")
 
         # 构建文件路径和URL
+        print(f"🔗 [任务 {task_id}] 构建文件路径...")
         file_path = Path(gallery_folder) / filename
         gallery_dir = Path(config_manager.get("gallery_dir", "gallery"))
         relative_path = file_path.relative_to(gallery_dir)
         image_url = f"/gallery/{relative_path.as_posix()}"
 
         # 任务完成
+        print(f"🎉 [任务 {task_id}] 全部完成！")
         generation_tasks[task_id] = {
             'status': 'completed',
             'progress': 100,
@@ -141,7 +163,7 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
             'gen_time': gen_time
         }
 
-        print(f"✅ [任务 {task_id}] 生成完成")
+        print(f"✅ [任务 {task_id}] 任务已完成")
 
     except Exception as e:
         import traceback
@@ -252,6 +274,23 @@ def api_load_model():
         return jsonify({
             'success': False,
             'message': f"加载模型失败: {str(e)}"
+        })
+
+
+@app.route('/api/unload-model', methods=['POST'])
+def api_unload_model():
+    """卸载模型"""
+    try:
+        success, message = unload_model()
+
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f"卸载模型失败: {str(e)}"
         })
 
 

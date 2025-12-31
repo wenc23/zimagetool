@@ -3,6 +3,7 @@
 // DOM 元素缓存
 const DOM = {
     loadModelBtn: null,
+    unloadModelBtn: null,
     generateBtn: null,
     optimizeBtn: null,
     useOptimizedBtn: null,
@@ -27,6 +28,7 @@ const DOM = {
 
     init() {
         this.loadModelBtn = document.getElementById('loadModelBtn');
+        this.unloadModelBtn = document.getElementById('unloadModelBtn');
         this.generateBtn = document.getElementById('generateBtn');
         this.optimizeBtn = document.getElementById('optimizeBtn');
         this.useOptimizedBtn = document.getElementById('useOptimizedBtn');
@@ -73,6 +75,7 @@ class ZImageApp {
         // 按钮事件映射
         const buttonEvents = {
             'loadModelBtn': 'loadModel',
+            'unloadModelBtn': 'unloadModel',
             'generateBtn': 'generateImage',
             'optimizeBtn': 'optimizePrompt',
             'useOptimizedBtn': 'useOptimizedPrompt',
@@ -91,40 +94,22 @@ class ZImageApp {
             this.updatePromptPreview(e.target.value);
         });
 
-        // 主题切换监听
-        DOM.themeToggle.addEventListener('click', () => this.toggleTheme());
+        // 主题切换已在layout.html中全局处理，这里不需要再绑定
     }
 
     initTheme() {
-        // 从localStorage读取保存的主题
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        this.updateThemeIcon(savedTheme);
+        // 主题初始化已在layout.html中全局处理
+        // 这里保留空函数以维持兼容性
     }
 
     toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        this.updateThemeIcon(newTheme);
-
-        this.showNotification(
-            newTheme === 'dark' ? '🌙 已切换到夜间模式' : '☀️ 已切换到日间模式',
-            'info'
-        );
+        // 主题切换已在layout.html中全局处理
+        // 这里保留空函数以维持兼容性
     }
 
     updateThemeIcon(theme) {
-        const icon = DOM.themeToggle.querySelector('i');
-        if (theme === 'dark') {
-            icon.classList.remove('fa-moon');
-            icon.classList.add('fa-sun');
-        } else {
-            icon.classList.remove('fa-sun');
-            icon.classList.add('fa-moon');
-        }
+        // 主题图标更新已在layout.html中全局处理
+        // 这里保留空函数以维持兼容性
     }
 
     async checkModelStatus() {
@@ -162,6 +147,13 @@ class ZImageApp {
         DOM.loadModelBtn.classList.remove(btnState.removeClass);
         DOM.loadModelBtn.classList.add(btnState.addClass);
         DOM.generateBtn.disabled = !isLoaded;
+
+        // 显示/隐藏卸载按钮
+        if (isLoaded) {
+            DOM.unloadModelBtn.style.display = 'inline-block';
+        } else {
+            DOM.unloadModelBtn.style.display = 'none';
+        }
     }
 
     async loadConfig() {
@@ -233,6 +225,44 @@ class ZImageApp {
         if (states[state]) {
             DOM.loadModelBtn.innerHTML = states[state].html;
             DOM.loadModelBtn.disabled = states[state].disabled;
+        }
+    }
+
+    async unloadModel() {
+        // 确认卸载
+        if (!confirm('确定要卸载模型吗？这将释放显存，但需要重新加载才能生成图片。')) {
+            return;
+        }
+
+        // 更新按钮状态
+        DOM.unloadModelBtn.disabled = true;
+        DOM.unloadModelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 卸载中...';
+
+        try {
+            const response = await fetch('/api/unload-model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.modelLoaded = false;
+                this.updateModelStatusUI();
+                DOM.loadStatus.innerHTML = `<div class="status-message success">${data.message}</div>`;
+                this.showNotification('✅ 模型已卸载', 'success');
+            } else {
+                DOM.loadStatus.innerHTML = `<div class="status-message error">${data.message}</div>`;
+                this.showNotification('⚠️ ' + data.message, 'error');
+            }
+        } catch (error) {
+            console.error('卸载模型失败:', error);
+            DOM.loadStatus.innerHTML = '<div class="status-message error">❌ 网络错误，请检查连接</div>';
+            this.showNotification('❌ 网络错误', 'error');
+        } finally {
+            // 恢复卸载按钮状态
+            DOM.unloadModelBtn.disabled = false;
+            DOM.unloadModelBtn.innerHTML = '<i class="fas fa-eject"></i> 卸载模型';
         }
     }
 
