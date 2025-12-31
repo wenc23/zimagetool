@@ -1,0 +1,16 @@
+{
+  "model_path": "models/Z-Image-Turbo",
+  "default_optimization_mode": "basic",
+  "default_width": 1024,
+  "default_height": 1024,
+  "default_steps": 9,
+  "default_filename": "generated_image.png",
+  "deepseek_api_key": "",
+  "deepseek_base_url": "https://api.deepseek.com/v1/chat/completions",
+  "gallery_dir": "gallery",
+  "offload_folder": "offload",
+  "enable_attention_slicing": true,
+  "attention_slicing_size": "max",
+  "webui_port": 7860,
+  "webui_share": false
+}
