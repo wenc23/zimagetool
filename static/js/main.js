@@ -5,7 +5,7 @@ const DOM = {
     loadModelBtn: null,
     unloadModelBtn: null,
     generateBtn: null,
-    optimizeBtn: null,
+    optimizePromptBtn: null,
     useOptimizedBtn: null,
     cancelEditBtn: null,
     downloadBtn: null,
@@ -30,7 +30,7 @@ const DOM = {
         this.loadModelBtn = document.getElementById('loadModelBtn');
         this.unloadModelBtn = document.getElementById('unloadModelBtn');
         this.generateBtn = document.getElementById('generateBtn');
-        this.optimizeBtn = document.getElementById('optimizeBtn');
+        this.optimizePromptBtn = document.getElementById('optimizePromptBtn');
         this.useOptimizedBtn = document.getElementById('useOptimizedBtn');
         this.cancelEditBtn = document.getElementById('cancelEditBtn');
         this.downloadBtn = document.getElementById('downloadBtn');
@@ -77,7 +77,7 @@ class ZImageApp {
             'loadModelBtn': 'loadModel',
             'unloadModelBtn': 'unloadModel',
             'generateBtn': 'generateImage',
-            'optimizeBtn': 'optimizePrompt',
+            'optimizePromptBtn': 'optimizePrompt',
             'useOptimizedBtn': 'useOptimizedPrompt',
             'cancelEditBtn': 'cancelEdit',
             'downloadBtn': 'downloadImage',
@@ -86,7 +86,10 @@ class ZImageApp {
 
         // 批量绑定按钮事件
         Object.entries(buttonEvents).forEach(([id, method]) => {
-            DOM[id].addEventListener('click', () => this[method]());
+            const btn = DOM[id];
+            if (btn) {
+                btn.addEventListener('click', () => this[method]());
+            }
         });
 
         // 提示词输入监听
@@ -153,6 +156,46 @@ class ZImageApp {
             DOM.unloadModelBtn.style.display = 'inline-block';
         } else {
             DOM.unloadModelBtn.style.display = 'none';
+        }
+
+        // 更新模型状态指示器
+        this.updateModelStatusIndicator(isLoaded);
+
+        // 更新步骤指示器
+        this.updateStepIndicator(isLoaded);
+    }
+
+    updateModelStatusIndicator(isLoaded) {
+        const indicator = document.getElementById('modelStatusIndicator');
+        const statusText = document.getElementById('modelStatusText');
+
+        if (!indicator || !statusText) return;
+
+        if (isLoaded) {
+            indicator.classList.add('loaded');
+            statusText.textContent = '已加载';
+        } else {
+            indicator.classList.remove('loaded');
+            statusText.textContent = '未加载';
+        }
+    }
+
+    updateStepIndicator(modelLoaded) {
+        // 步骤1：准备模型
+        const step1 = document.querySelector('.step[data-step="1"]');
+        // 步骤2：配置参数
+        const step2 = document.querySelector('.step[data-step="2"]');
+
+        if (step1 && step2) {
+            if (modelLoaded) {
+                step1.classList.add('completed');
+                step1.classList.remove('active');
+                step2.classList.add('active');
+            } else {
+                step1.classList.add('active');
+                step1.classList.remove('completed');
+                step2.classList.remove('active');
+            }
         }
     }
 
@@ -349,17 +392,15 @@ class ZImageApp {
         DOM.promptPreview.innerHTML = `
             <div class="prompt-placeholder">
                 <i class="fas fa-keyboard"></i>
-                <p>优化后的提示词将在这里显示，您可以编辑后再生成</p>
+                <p>点击"优化提示词"按钮后，优化后的提示词将在这里显示</p>
             </div>
         `;
         DOM.editPromptActions.style.display = 'none';
     }
 
     updatePromptPreview(prompt = null, isOptimized = false) {
-        const promptPreview = document.getElementById('promptPreview');
-
         if (isOptimized && this.optimizedPrompt) {
-            promptPreview.innerHTML = `
+            DOM.promptPreview.innerHTML = `
                 <div style="color: var(--primary-color);">
                     <strong><i class="fas fa-wand-magic-sparkles"></i> 优化后的提示词:</strong><br>
                     ${this.optimizedPrompt}
@@ -369,21 +410,21 @@ class ZImageApp {
         }
 
         if (!prompt) {
-            prompt = document.getElementById('promptInput').value;
+            prompt = DOM.promptInput.value;
         }
 
         if (prompt.trim()) {
-            promptPreview.innerHTML = `
+            DOM.promptPreview.innerHTML = `
                 <div>
                     <strong><i class="fas fa-keyboard"></i> 当前提示词:</strong><br>
                     ${prompt}
                 </div>
             `;
         } else {
-            promptPreview.innerHTML = `
+            DOM.promptPreview.innerHTML = `
                 <div class="prompt-placeholder">
                     <i class="fas fa-keyboard"></i>
-                    <p>优化后的提示词将在这里显示，您可以编辑后再生成</p>
+                    <p>点击"优化提示词"按钮后，优化后的提示词将在这里显示</p>
                 </div>
             `;
         }
@@ -401,6 +442,9 @@ class ZImageApp {
             DOM.promptInput.focus();
             return;
         }
+
+        // 更新步骤指示器 - 进入步骤3（生成）
+        this.updateStepForGeneration();
 
         // 收集生成参数
         const params = this.collectGenerationParams(prompt);
@@ -420,12 +464,37 @@ class ZImageApp {
                 this.hideLoading();
                 this.updateStatusOutput(data.message, 'error');
                 this.showNotification('❌ 生成失败', 'error');
+                // 回退步骤
+                this.revertStepFromGeneration();
             }
         } catch (error) {
             console.error('生成图片失败:', error);
             this.hideLoading();
             this.updateStatusOutput('❌ 网络错误，请检查连接', 'error');
             this.showNotification('❌ 网络错误', 'error');
+            this.revertStepFromGeneration();
+        }
+    }
+
+    updateStepForGeneration() {
+        const step2 = document.querySelector('.step[data-step="2"]');
+        const step3 = document.querySelector('.step[data-step="3"]');
+
+        if (step2 && step3) {
+            step2.classList.add('completed');
+            step2.classList.remove('active');
+            step3.classList.add('active');
+        }
+    }
+
+    revertStepFromGeneration() {
+        const step2 = document.querySelector('.step[data-step="2"]');
+        const step3 = document.querySelector('.step[data-step="3"]');
+
+        if (step2 && step3) {
+            step3.classList.remove('active');
+            step2.classList.add('active');
+            step2.classList.remove('completed');
         }
     }
 
@@ -507,6 +576,20 @@ class ZImageApp {
         DOM.actionButtons.style.display = 'flex';
         this.updatePromptPreview(this.optimizedPrompt, true);
         this.showNotification('✅ 图片生成成功', 'success');
+
+        // 更新步骤指示器 - 进入步骤4（查看）
+        this.updateStepForView();
+    }
+
+    updateStepForView() {
+        const step3 = document.querySelector('.step[data-step="3"]');
+        const step4 = document.querySelector('.step[data-step="4"]');
+
+        if (step3 && step4) {
+            step3.classList.add('completed');
+            step3.classList.remove('active');
+            step4.classList.add('active');
+        }
     }
 
     simulateProgress() {
@@ -578,13 +661,22 @@ class ZImageApp {
 
     downloadImage() {
         if (this.currentImageUrl) {
+            console.log('下载图片:', this.currentImageUrl);
+            console.log('文件路径:', this.currentFilePath);
+
+            const filename = document.getElementById('filename').value;
+            console.log('文件名:', filename);
+
             const link = document.createElement('a');
             link.href = this.currentImageUrl;
-            link.download = document.getElementById('filename').value;
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             this.showNotification('📥 开始下载图片', 'info');
+        } else {
+            console.error('没有可下载的图片URL');
+            this.showNotification('❌ 没有可下载的图片', 'error');
         }
     }
 
