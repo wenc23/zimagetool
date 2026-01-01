@@ -441,6 +441,7 @@ def api_generate_progress(task_id):
         'stage': task.get('stage', ''),
         'image_url': task.get('image_url'),
         'message': task.get('message'),
+        'file_path': task.get('file_path'),
         'prompt': task.get('prompt')
     })
 

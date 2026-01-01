@@ -3,6 +3,43 @@
 {% block title %}首页 - Z-Image-Turbo{% endblock %}
 
 {% block content %}
+<!-- 步骤进度指示器 -->
+<div class="steps-container mb-4">
+    <div class="steps-wrapper">
+        <div class="step active" data-step="1">
+            <div class="step-number">1</div>
+            <div class="step-label">
+                <div class="step-title">准备</div>
+                <div class="step-desc">加载模型</div>
+            </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="2">
+            <div class="step-number">2</div>
+            <div class="step-label">
+                <div class="step-title">配置</div>
+                <div class="step-desc">设置参数</div>
+            </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="3">
+            <div class="step-number">3</div>
+            <div class="step-label">
+                <div class="step-title">生成</div>
+                <div class="step-desc">创建图片</div>
+            </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="4">
+            <div class="step-number">4</div>
+            <div class="step-label">
+                <div class="step-title">查看</div>
+                <div class="step-desc">预览下载</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="generator-container">
     <!-- 页面标题 -->
     <div class="page-header text-center mb-4">
@@ -11,105 +48,201 @@
     </div>
 
     <div class="generator-grid">
-        <!-- 左侧：配置面板 -->
-        <div class="config-panel">
-            <!-- 模型加载卡片 -->
-            <div class="card mb-3">
+        <!-- 步骤1：模型准备（置顶，优先处理） -->
+        <div class="full-width-section">
+            <div class="card model-setup-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-cube"></i> 模型加载</h3>
+                    <h3><i class="fas fa-rocket"></i> 步骤 1：准备模型</h3>
                 </div>
                 <div class="card-body">
-                    <div class="form-group">
-                        <label class="form-label">优化模式</label>
-                        <select id="optimizationMode" class="form-control">
-                            <option value="basic">基础模式 (标准显存)</option>
-                            <option value="lowvram">低显存优化 (6GB以下)</option>
-                        </select>
-                        <small class="form-text">根据你的显卡显存选择合适的模式</small>
-                    </div>
-                    <button id="loadModelBtn" class="btn btn-primary btn-lg" style="width: 100%;">
-                        <i class="fas fa-rocket"></i> 加载模型
-                    </button>
-                    <button id="unloadModelBtn" class="btn btn-danger btn-lg mt-2" style="width: 100%; display: none;">
-                        <i class="fas fa-eject"></i> 卸载模型
-                    </button>
-                    <div id="loadStatus" class="mt-2"></div>
-                </div>
-            </div>
-
-            <!-- 生成参数卡片 -->
-            <div class="card">
-                <div class="card-header">
-                    <h3><i class="fas fa-sliders-h"></i> 生成参数</h3>
-                </div>
-                <div class="card-body">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">宽度 (px)</label>
-                            <input type="number" id="width" class="form-control" value="1024" min="256" max="2048" step="64">
+                    <div class="d-flex gap-3 align-center">
+                        <div class="model-status-indicator" id="modelStatusIndicator">
+                            <div class="status-dot"></div>
+                            <div class="status-text">
+                                <div class="status-title">模型状态</div>
+                                <div class="status-desc" id="modelStatusText">未加载</div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">高度 (px)</label>
-                            <input type="number" id="height" class="form-control" value="1024" min="256" max="2048" step="64">
+                        <div class="model-actions flex-grow-1">
+                            <div class="d-flex gap-2">
+                                <div class="form-group mb-0 flex-grow-1">
+                                    <label class="form-label">优化模式</label>
+                                    <select id="optimizationMode" class="form-control">
+                                        <option value="basic">基础模式 (标准显存)</option>
+                                        <option value="lowvram">低显存优化 (6GB以下)</option>
+                                    </select>
+                                </div>
+                                <button id="loadModelBtn" class="btn btn-primary btn-large">
+                                    <i class="fas fa-rocket"></i> 加载模型
+                                </button>
+                                <button id="unloadModelBtn" class="btn btn-danger btn-large" style="display: none;">
+                                    <i class="fas fa-eject"></i> 卸载模型
+                                </button>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="form-group">
-                        <label class="form-label">生成步数: <span id="stepsValue">9</span></label>
-                        <input type="range" id="steps" class="form-range" value="9" min="4" max="20" step="1">
-                        <small class="form-text">步数越多质量越高，但生成时间越长</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">文件名</label>
-                        <input type="text" id="filename" class="form-control" value="generated_image.png" placeholder="例如: my_image.png">
-                    </div>
+                    <div id="loadStatus" class="mt-3"></div>
                 </div>
             </div>
         </div>
 
-        <!-- 中间：提示词输入 -->
-        <div class="prompt-panel">
-            <div class="card h-100">
+        <!-- 左侧：提示词输入与生成参数（主要工作区） -->
+        <div class="main-panel">
+            <!-- 步骤2：配置提示词 -->
+            <div class="card mb-3 step-2-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-pencil-alt"></i> 提示词</h3>
+                    <h3><i class="fas fa-pencil-alt"></i> 步骤 2：描述你想要的图片</h3>
                 </div>
-                <div class="card-body d-flex flex-column">
-                    <div class="form-group flex-grow-1">
+                <div class="card-body">
+                    <div class="form-group">
                         <label class="form-label">输入提示词</label>
-                        <textarea id="promptInput" class="form-control" rows="6" placeholder="描述你想要生成的图片..."></textarea>
+                        <textarea id="promptInput" class="form-control" rows="5" placeholder="例如：一只可爱的猫咪，坐在窗台上，阳光洒在身上，高清摄影..."></textarea>
+                        <small class="form-text">详细描述能生成更符合你预期的图片</small>
                     </div>
 
+                    <!-- 优化提示词按钮 -->
+                    <button id="optimizePromptBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 1.5rem;">
+                        <i class="fas fa-wand-magic-sparkles"></i> 优化提示词
+                    </button>
+                </div>
+            </div>
+
+            <!-- 步骤2：提示词优化模块 -->
+            <div class="card mb-3 step-2-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-wand-magic-sparkles"></i> 提示词优化</h3>
+                </div>
+                <div class="card-body">
                     <!-- 提示词预览 -->
                     <div id="promptPreview" class="prompt-preview mb-3">
                         <div class="prompt-placeholder">
                             <i class="fas fa-keyboard"></i>
-                            <p>输入提示词后，这里会显示预览</p>
+                            <p>点击"优化提示词"按钮后，优化后的提示词将在这里显示</p>
                         </div>
                     </div>
 
                     <!-- 编辑提示词操作按钮 -->
-                    <div id="editPromptActions" class="edit-actions d-none gap-2 mb-3">
+                    <div id="editPromptActions" class="edit-actions" style="display: none;">
                         <button id="useOptimizedBtn" class="btn btn-success">
-                            <i class="fas fa-check"></i> 使用此提示词
+                            <i class="fas fa-check"></i> 使用优化后的提示词
                         </button>
                         <button id="cancelEditBtn" class="btn btn-outline">
                             <i class="fas fa-times"></i> 取消
                         </button>
                     </div>
+                </div>
+            </div>
 
-                    <button id="generateBtn" class="btn btn-primary btn-lg" style="width: 100%;" disabled>
-                        <i class="fas fa-magic"></i> 生成图片
-                    </button>
+            <!-- 步骤2：高级优化选项 -->
+            <div class="card mb-3 step-2-card">
+                <div class="card-header accordion-header" onclick="toggleAccordion('advancedOptions')">
+                    <div class="d-flex justify-between align-center">
+                        <h3><i class="fas fa-cog"></i> 高级优化选项（可选）</h3>
+                        <i class="fas fa-chevron-down accordion-icon"></i>
+                    </div>
+                </div>
+                <div id="advancedOptions" class="accordion-content">
+                    <div class="card-body">
+                        <div class="options-grid">
+                            <div class="form-group">
+                                <label class="form-label">艺术风格</label>
+                                <input type="text" id="artStyle" class="form-control" placeholder="例如: 油画、水彩、素描">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">角色描述</label>
+                                <input type="text" id="character" class="form-control" placeholder="例如: 年轻女性、长发、微笑">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">姿势描述</label>
+                                <input type="text" id="pose" class="form-control" placeholder="例如: 坐姿、侧身、挥手">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">背景描述</label>
+                                <input type="text" id="background" class="form-control" placeholder="例如: 森林、海滩、城市">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">服装描述</label>
+                                <input type="text" id="clothing" class="form-control" placeholder="例如: 连衣裙、休闲装、古装">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">灯光效果</label>
+                                <input type="text" id="lighting" class="form-control" placeholder="例如: 自然光、柔和光、戏剧光">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">构图方式</label>
+                                <input type="text" id="composition" class="form-control" placeholder="例如: 居中、三分法、特写">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">额外细节</label>
+                                <textarea id="details" class="form-control" rows="2" placeholder="其他需要添加的细节描述"></textarea>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-center">
+                            <small class="form-text">
+                                <i class="fas fa-info-circle"></i> 填写这些选项可以生成更精细的优化提示词
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 步骤2：配置参数 -->
+            <div class="card step-2-card">
+                <div class="card-header accordion-header" onclick="toggleAccordion('basicParams')">
+                    <div class="d-flex justify-between align-center">
+                        <h3><i class="fas fa-sliders-h"></i> 基本参数设置</h3>
+                        <i class="fas fa-chevron-down accordion-icon"></i>
+                    </div>
+                </div>
+                <div id="basicParams" class="accordion-content active">
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">宽度</label>
+                                <input type="number" id="width" class="form-control" value="1024" min="256" max="2048" step="64">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">高度</label>
+                                <input type="number" id="height" class="form-control" value="1024" min="256" max="2048" step="64">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">生成步数: <span id="stepsValue">9</span></label>
+                            <input type="range" id="steps" class="form-range" value="9" min="4" max="20" step="1">
+                            <small class="form-text">步数越多质量越高，但生成时间越长</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">文件名</label>
+                            <input type="text" id="filename" class="form-control" value="generated_image.png" placeholder="例如: my_image.png">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- 右侧：图片预览 -->
-        <div class="preview-panel">
-            <div class="card h-100">
+        <!-- 右侧：预览与生成 -->
+        <div class="side-panel">
+            <!-- 步骤3：生成按钮（始终可见，突出显示） -->
+            <div class="card mb-3 generate-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-image"></i> 图片预览</h3>
+                    <h3><i class="fas fa-magic"></i> 步骤 3：开始生成</h3>
+                </div>
+                <div class="card-body">
+                    <button id="generateBtn" class="btn btn-primary btn-generate" style="width: 100%;" disabled>
+                        <i class="fas fa-magic"></i> 开始生成图片
+                    </button>
+                    <p class="text-center mt-2 mb-0" style="font-size: 0.875rem; color: var(--text-tertiary);">
+                        <i class="fas fa-info-circle"></i> 确保已加载模型并输入提示词
+                    </p>
+                </div>
+            </div>
+
+            <!-- 步骤4：图片预览 -->
+            <div class="card preview-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-image"></i> 步骤 4：查看结果</h3>
                 </div>
                 <div class="card-body">
                     <div id="imagePreview" class="image-preview">
@@ -121,11 +254,11 @@
 
                     <div id="statusOutput" class="status-output mt-3"></div>
 
-                    <div id="actionButtons" class="action-buttons d-none gap-2 mt-3">
-                        <button id="downloadBtn" class="btn btn-secondary" style="flex: 1;">
+                    <div id="actionButtons" class="action-buttons gap-2 mt-3" style="display: none;">
+                        <button id="downloadBtn" class="btn btn-secondary btn-large" style="flex: 1;">
                             <i class="fas fa-download"></i> 下载
                         </button>
-                        <button id="viewGalleryBtn" class="btn btn-outline" style="flex: 1;">
+                        <button id="viewGalleryBtn" class="btn btn-outline btn-large" style="flex: 1;">
                             <i class="fas fa-images"></i> 查看画廊
                         </button>
                     </div>
@@ -133,63 +266,274 @@
             </div>
         </div>
     </div>
-
-    <!-- 高级优化选项 -->
-    <div class="card mt-4">
-        <div class="card-header accordion-header" onclick="toggleAccordion('advancedOptions')">
-            <div class="d-flex justify-between align-center">
-                <h3><i class="fas fa-cog"></i> 高级优化选项</h3>
-                <i class="fas fa-chevron-down accordion-icon"></i>
-            </div>
-        </div>
-        <div id="advancedOptions" class="accordion-content">
-            <div class="card-body">
-                <div class="options-grid">
-                    <div class="form-group">
-                        <label class="form-label">艺术风格</label>
-                        <input type="text" id="artStyle" class="form-control" placeholder="例如: 油画、水彩、素描">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">角色描述</label>
-                        <input type="text" id="character" class="form-control" placeholder="例如: 年轻女性、长发、微笑">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">姿势描述</label>
-                        <input type="text" id="pose" class="form-control" placeholder="例如: 坐姿、侧身、挥手">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">背景描述</label>
-                        <input type="text" id="background" class="form-control" placeholder="例如: 森林、海滩、城市">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">服装描述</label>
-                        <input type="text" id="clothing" class="form-control" placeholder="例如: 连衣裙、休闲装、古装">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">灯光效果</label>
-                        <input type="text" id="lighting" class="form-control" placeholder="例如: 自然光、柔和光、戏剧光">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">构图方式</label>
-                        <input type="text" id="composition" class="form-control" placeholder="例如: 居中、三分法、特写">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">额外细节</label>
-                        <textarea id="details" class="form-control" rows="2" placeholder="其他需要添加的细节描述"></textarea>
-                    </div>
-                </div>
-
-                <div class="text-center mt-3">
-                    <button id="optimizeBtn" class="btn btn-primary">
-                        <i class="fas fa-wand-magic-sparkles"></i> 预览优化效果
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <style>
+    /* ==================== 简化版步骤进度指示器 ==================== */
+    .steps-container {
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        padding: var(--space-4);
+        margin-bottom: var(--space-6);
+        border: 1px solid var(--border-color);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .steps-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .step {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        position: relative;
+        z-index: 2;
+        transition: var(--transition);
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-md);
+        background: transparent;
+    }
+
+    .step:hover {
+        background: rgba(59, 130, 246, 0.05);
+    }
+
+    .step-number {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-full);
+        background: var(--bg-secondary);
+        color: var(--text-tertiary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--font-sm);
+        font-weight: 700;
+        border: 2px solid var(--border-color);
+        transition: var(--transition);
+    }
+
+    .step.active .step-number {
+        background: var(--primary-gradient);
+        color: white;
+        border-color: var(--primary-color);
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        transform: scale(1.1);
+    }
+
+    .step.completed .step-number {
+        background: var(--success-gradient);
+        color: white;
+        border-color: var(--success-color);
+    }
+
+    .step-label {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .step-title {
+        font-weight: 600;
+        font-size: var(--font-sm);
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .step-desc {
+        font-size: var(--font-xs);
+        color: var(--text-tertiary);
+        font-weight: 500;
+    }
+
+    .step.active .step-title {
+        color: var(--primary-color);
+        font-weight: 700;
+    }
+
+    .step.completed .step-title {
+        color: var(--success-color);
+    }
+
+    .step-connector {
+        flex: 1;
+        height: 2px;
+        background: var(--border-color);
+        margin: 0 var(--space-2);
+        position: relative;
+        z-index: 1;
+        transition: var(--transition);
+        border-radius: var(--radius-full);
+    }
+
+    .step.active ~ .step-connector {
+        background: linear-gradient(90deg, var(--primary-color) 0%, var(--border-color) 100%);
+    }
+
+    .step.completed ~ .step-connector {
+        background: linear-gradient(90deg, var(--success-color) 0%, var(--border-color) 100%);
+    }
+
+    /* 全宽区域 */
+    .full-width-section {
+        grid-column: 1 / -1;
+    }
+
+    /* 模型状态指示器 - 更直观的设计 */
+    .model-status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        border: 2px solid var(--border-color);
+        transition: var(--transition);
+        width: 100%;
+    }
+
+    .model-status-indicator.loaded {
+        border-color: var(--success-color);
+        background: var(--success-light);
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+
+    .model-status-indicator.loading {
+        border-color: var(--warning-color);
+        background: var(--warning-light);
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    }
+
+    .model-status-indicator.error {
+        border-color: var(--danger-color);
+        background: var(--danger-light);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+
+    .status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--text-tertiary);
+        position: relative;
+    }
+
+    .model-status-indicator.loaded .status-dot {
+        background: var(--success-color);
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+    }
+
+    .model-status-indicator.loading .status-dot {
+        background: var(--warning-color);
+        animation: pulse 1.5s infinite;
+    }
+
+    .model-status-indicator.error .status-dot {
+        background: var(--danger-color);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3);
+    }
+
+    .status-dot::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.2;
+    }
+
+    .status-text {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .status-title {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-desc {
+        font-size: 1rem;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .model-status-indicator.loaded .status-desc {
+        color: var(--success-color);
+        font-weight: 600;
+    }
+
+    .model-status-indicator.loading .status-desc {
+        color: var(--warning-color);
+        font-weight: 600;
+    }
+
+    .model-status-indicator.error .status-desc {
+        color: var(--danger-color);
+        font-weight: 600;
+    }
+
+    .status-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* 大按钮样式 - Fitts定律优化 */
+    .btn-large {
+        padding: 1rem 2rem;
+        font-size: 1.125rem;
+        min-height: 54px;
+    }
+
+    .btn-generate {
+        padding: 1.25rem 2rem;
+        font-size: 1.25rem;
+        min-height: 60px;
+        background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        transition: var(--transition);
+    }
+
+    .btn-generate:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(52, 152, 219, 0.6);
+    }
+
+    /* 卡片特定样式 */
+    .model-setup-card {
+        border: 2px solid var(--primary-color);
+        box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.1);
+    }
+
+    .generate-card {
+        background: linear-gradient(135deg, var(--card-bg) 0%, var(--primary-light) 100%);
+    }
+
+    .step-2-card {
+        border-left: 4px solid transparent;
+        transition: var(--transition);
+    }
+
+    .step-2-card:hover {
+        border-left-color: var(--primary-color);
+    }
+
     .page-header h1 {
         color: var(--primary-color);
         margin-bottom: 0.5rem;
@@ -202,15 +546,91 @@
 
     .generator-grid {
         display: grid;
-        grid-template-columns: 300px 1fr 400px;
+        grid-template-columns: 1fr;
         gap: 1.5rem;
         margin-bottom: 1.5rem;
     }
 
+    .main-content {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+
     @media (max-width: 1200px) {
-        .generator-grid {
+        .main-content {
             grid-template-columns: 1fr;
         }
+    }
+
+    /* 左侧：主要输入区域 */
+    .input-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    /* 右侧：预览与操作区域 */
+    .action-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        position: sticky;
+        top: 100px;
+    }
+
+    /* 生成按钮卡片 - 突出显示 */
+    .generate-card {
+        background: linear-gradient(135deg, var(--card-bg) 0%, var(--primary-light) 100%);
+        border: 2px solid var(--primary-color);
+        box-shadow: 0 8px 32px rgba(59, 130, 246, 0.15);
+        order: -1; /* 在移动端放在顶部 */
+    }
+
+    .generate-card .card-header {
+        background: var(--primary-gradient);
+        color: white;
+    }
+
+    .generate-card .card-header h3 {
+        color: white;
+    }
+
+    .generate-card .card-header i {
+        color: white;
+    }
+
+    .btn-generate {
+        padding: 1.25rem 2rem;
+        font-size: 1.25rem;
+        min-height: 60px;
+        background: var(--primary-gradient);
+        color: white;
+        border: none;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        transition: var(--transition);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+
+    .btn-generate:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.6);
+        background: var(--primary-gradient-hover);
+    }
+
+    .btn-generate:active:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4);
+    }
+
+    .btn-generate:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
     }
 
     .form-row {
@@ -249,6 +669,12 @@
         background: var(--bg-tertiary);
         border-radius: var(--radius-md);
         border: 2px dashed var(--border-color);
+        transition: var(--transition);
+    }
+
+    .prompt-preview:hover {
+        border-color: var(--primary-color);
+        background: var(--primary-light);
     }
 
     .prompt-placeholder {
@@ -261,6 +687,16 @@
         font-size: 2rem;
         margin-bottom: 0.5rem;
         opacity: 0.5;
+    }
+
+    .edit-actions {
+        display: flex;
+        justify-content: center;
+        margin-top: 1rem;
+    }
+
+    .edit-actions .btn {
+        min-width: 160px;
     }
 
     .image-preview {
@@ -375,6 +811,23 @@
 
     .text-danger {
         color: var(--danger-color);
+    }
+
+    /* 卡片底部样式 */
+    .card-footer {
+        padding: 1.25rem;
+        border-top: 1px solid var(--border-color);
+        background: var(--bg-tertiary);
+    }
+
+    @media (max-width: 768px) {
+        .card-footer {
+            padding: 1rem;
+        }
+
+        .card-footer .btn {
+            width: 100%;
+        }
     }
 </style>
 
