@@ -44,12 +44,15 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
             }
             return
 
-        # 更新任务状态 - 开始优化提示词
-        generation_tasks[task_id]['progress'] = 5
-        generation_tasks[task_id]['stage'] = '优化提示词...'
-
         # 如果启用提示词优化
         if optimize_prompt:
+            # 更新状态为优化中
+            generation_tasks[task_id] = {
+                'status': 'optimizing',
+                'progress': 5,
+                'stage': '正在优化提示词...'
+            }
+
             prompt = optimize_with_custom_input(
                 prompt,
                 art_style=art_style,
@@ -62,28 +65,33 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
                 details=additional_details
             )
 
+            # 优化完成
+            generation_tasks[task_id] = {
+                'status': 'pending',
+                'progress': 10,
+                'stage': '提示词优化完成，准备生成...'
+            }
+
         # 确保文件名格式正确
         filename = validate_file_extension(filename)
-
-        # 更新任务状态 - 开始生成
-        generation_tasks[task_id]['progress'] = 10
-        generation_tasks[task_id]['stage'] = '准备生成...'
-        generation_tasks[task_id]['prompt'] = prompt
 
         print(f"🔄 [任务 {task_id}] 开始生成图片: {prompt}")
         start_time = time.time()
 
-        # 更新进度 - 开始生成
-        generation_tasks[task_id]['progress'] = 15
-        generation_tasks[task_id]['stage'] = '初始化...'
-
-        # 生成图片（带进度更新）
+        # 生成图片
         def progress_callback(pipe, step, timestep, callback_kwargs):
-            # 从15%到85%，共70%用于生成过程
-            progress = 15 + int((step + 1) / steps * 70)
-            generation_tasks[task_id]['progress'] = progress
-            generation_tasks[task_id]['stage'] = f'生成中: {step + 1}/{steps} 步'
-            return callback_kwargs  # 必须返回 callback_kwargs
+            # 计算进度百分比
+            progress_percent = int((step + 1) / steps * 100)
+
+            # 更新任务进度到前端
+            generation_tasks[task_id] = {
+                'status': 'generating',
+                'progress': progress_percent,
+                'stage': f'生成中: {step + 1}/{steps} 步'
+            }
+
+            print(f"  生成进度: {step + 1}/{steps} 步 ({progress_percent}%)")
+            return callback_kwargs
 
         # 验证并准备生成参数
         generation_params = {
@@ -100,10 +108,17 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
                 raise ValueError(f"参数 {key} 不能为 None")
 
         print(f"📝 生成参数: prompt={prompt[:50]}..., size={width}x{height}, steps={steps}")
+        print(f"🎨 [任务 {task_id}] 开始图片生成...")
+
+        # 更新状态为准备生成
+        generation_tasks[task_id] = {
+            'status': 'preparing',
+            'progress': 15,
+            'stage': '准备生成...'
+        }
 
         # 尝试使用回调（如果支持）
         try:
-            print(f"🎨 [任务 {task_id}] 开始图片生成...")
             image = pipe(
                 **generation_params,
                 callback_on_step_end=progress_callback,
@@ -118,25 +133,24 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
         gen_time = time.time() - start_time
         print(f"⏱️ [任务 {task_id}] 生成耗时: {gen_time:.2f}秒")
 
-        # 更新进度 - 生成已完成，准备保存 (85%)
-        generation_tasks[task_id]['progress'] = 88
-        generation_tasks[task_id]['stage'] = '生成完成，准备保存...'
-        print(f"💾 [任务 {task_id}] 准备保存图片...")
-
         # 保存图片到画廊
         try:
             save_start = time.time()
             print(f"💾 [任务 {task_id}] 调用 save_to_gallery...")
+
+            # 更新状态为保存中
+            generation_tasks[task_id] = {
+                'status': 'saving',
+                'progress': 95,
+                'stage': '正在保存图片...'
+            }
+
             gallery_folder = save_to_gallery(
                 image, filename, prompt, width, height, steps,
                 gen_time, optimization_mode
             )
             save_duration = time.time() - save_start
             print(f"💾 [任务 {task_id}] 图片保存完成，耗时: {save_duration:.2f}秒")
-
-            # 保存完成 (92%)
-            generation_tasks[task_id]['progress'] = 92
-            generation_tasks[task_id]['stage'] = '保存完成...'
         except Exception as save_error:
             print(f"❌ [任务 {task_id}] 保存图片失败: {save_error}")
             import traceback
@@ -155,7 +169,6 @@ def generate_image_task(task_id, prompt, width, height, steps, filename, optimiz
         generation_tasks[task_id] = {
             'status': 'completed',
             'progress': 100,
-            'stage': '完成！',
             'image_url': image_url,
             'file_path': str(file_path),
             'prompt': prompt,
@@ -391,11 +404,10 @@ def api_generate():
         # 创建任务ID
         task_id = str(uuid.uuid4())
 
-        # 初始化任务状态
+        # 初始化任务状态 - 只有初始状态
         generation_tasks[task_id] = {
             'status': 'pending',
-            'progress': 0,
-            'stage': '准备中...'
+            'progress': 0
         }
 
         # 启动后台线程生成图片

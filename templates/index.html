@@ -198,12 +198,27 @@
                     <div class="card-body">
                         <div class="form-row">
                             <div class="form-group">
+                                <label class="form-label">分辨率预设</label>
+                                <select id="resolutionPreset" class="form-control" onchange="applyResolutionPreset()">
+                                    <option value="custom">自定义</option>
+                                    <option value="256x256">表情包 (256x256)</option>
+                                    <option value="1024x1024">1:1 (1024x1024)</option>
+                                    <option value="1920x1088">1080p (1920x1088)</option>
+                                    <option value="2560x1440">2K (2560x1440)</option>
+                                    <option value="2560x1600">平板 (2560x1600)</option>
+                                    <option value="1216x2640">手机 (1216x2640)</option>
+                                    <option value="2048x2048">4:4 (2048x2048)</option>
+                                    <option value="1920x1280">3:2 (1920x1280)</option>
+                                    <option value="1280x1920">2:3 (1280x1920)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <label class="form-label">宽度</label>
-                                <input type="number" id="width" class="form-control" value="1024" min="256" max="2048" step="64">
+                                <input type="number" id="width" class="form-control" value="1024" min="256" max="4096" step="64">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">高度</label>
-                                <input type="number" id="height" class="form-control" value="1024" min="256" max="2048" step="64">
+                                <input type="number" id="height" class="form-control" value="1024" min="256" max="4096" step="64">
                             </div>
                         </div>
 
@@ -250,6 +265,21 @@
                             <i class="fas fa-image fa-4x"></i>
                             <p>生成的图片将在这里显示</p>
                         </div>
+                    </div>
+
+                    <!-- 真实进度条 -->
+                    <div id="progressContainer" class="progress-container" style="display: none;">
+                        <div class="progress-header">
+                            <div class="progress-title">
+                                <i class="fas fa-cog fa-spin"></i>
+                                <span>正在生成图片...</span>
+                            </div>
+                            <div class="progress-percentage" id="progressPercentage">0%</div>
+                        </div>
+                        <div class="progress-bar-wrapper">
+                            <div id="progressBar" class="progress-bar"></div>
+                        </div>
+                        <div class="progress-status" id="progressStatus">准备中...</div>
                     </div>
 
                     <div id="statusOutput" class="status-output mt-3"></div>
@@ -797,6 +827,45 @@
         flex-direction: column;
     }
 
+    /* 生成状态样式 */
+    .generating-status {
+        background: var(--bg-tertiary);
+        border: 2px solid var(--primary-color);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+
+    .generating-status .status-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        font-size: 1.1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .generating-status .status-header i {
+        animation: spin 2s linear infinite;
+    }
+
+    .generating-status .status-details {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .generating-status .status-details p {
+        margin: 0.5rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .generating-status .status-details i {
+        color: var(--text-tertiary);
+    }
+
     /* 自定义复选框样式 */
     input[type="checkbox"] {
         width: 20px;
@@ -829,12 +898,147 @@
             width: 100%;
         }
     }
+
+    /* ==================== 真实进度条样式 ==================== */
+    .progress-container {
+        margin-bottom: 1.5rem;
+        padding: 1.5rem;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        border: 2px solid var(--primary-color);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+
+    .progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .progress-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--primary-color);
+    }
+
+    .progress-title i {
+        animation: spin 2s linear infinite;
+    }
+
+    .progress-percentage {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        min-width: 60px;
+        text-align: right;
+    }
+
+    .progress-bar-wrapper {
+        width: 100%;
+        height: 24px;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-full);
+        overflow: hidden;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        position: relative;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary-color) 0%, #60a5fa 100%);
+        border-radius: var(--radius-full);
+        transition: width 0.3s ease;
+        position: relative;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        min-width: 2%;
+    }
+
+    /* 进度条动画效果 */
+    .progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.3) 50%,
+            transparent 100%
+        );
+        animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            transform: translateX(-100%);
+        }
+        100% {
+            transform: translateX(100%);
+        }
+    }
+
+    .progress-status {
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        text-align: center;
+        font-weight: 500;
+    }
+
+    /* 进度条在不同阶段的颜色变化 */
+    .progress-bar[data-stage="optimizing"] {
+        background: linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+    }
+
+    .progress-bar[data-stage="preparing"] {
+        background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+
+    .progress-bar[data-stage="generating"] {
+        background: linear-gradient(90deg, var(--primary-color) 0%, #60a5fa 100%);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    }
+
+    .progress-bar[data-stage="saving"] {
+        background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
 </style>
 
 <script>
     // 更新步数显示
     document.getElementById('steps').addEventListener('input', function() {
         document.getElementById('stepsValue').textContent = this.value;
+    });
+
+    // 应用分辨率预设
+    function applyResolutionPreset() {
+        const preset = document.getElementById('resolutionPreset').value;
+        const widthInput = document.getElementById('width');
+        const heightInput = document.getElementById('height');
+
+        if (preset !== 'custom') {
+            const [width, height] = preset.split('x').map(Number);
+            widthInput.value = width;
+            heightInput.value = height;
+        }
+    }
+
+    // 当手动修改宽度或高度时，将预设设置为"自定义"
+    document.getElementById('width').addEventListener('input', function() {
+        document.getElementById('resolutionPreset').value = 'custom';
+    });
+
+    document.getElementById('height').addEventListener('input', function() {
+        document.getElementById('resolutionPreset').value = 'custom';
     });
 </script>
 {% endblock %}

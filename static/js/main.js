@@ -19,10 +19,6 @@ const DOM = {
     loadingOverlay: null,
     loadingText: null,
     loadingSubtext: null,
-    progressBar: null,
-    progressTextOverlay: null,
-    progressPercentage: null,
-    progressStage: null,
     loadStatus: null,
     themeToggle: null,
 
@@ -44,10 +40,6 @@ const DOM = {
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.loadingText = document.getElementById('loadingText');
         this.loadingSubtext = document.getElementById('loadingSubtext');
-        this.progressBar = document.getElementById('progressBar');
-        this.progressTextOverlay = document.getElementById('progressTextOverlay');
-        this.progressPercentage = document.getElementById('progressPercentage');
-        this.progressStage = document.getElementById('progressStage');
         this.loadStatus = document.getElementById('loadStatus');
         this.themeToggle = document.getElementById('themeToggle');
     }
@@ -69,6 +61,32 @@ class ZImageApp {
         this.checkModelStatus();
         this.loadConfig();
         this.initTheme();
+        this.loadFormData(); // 恢复用户输入数据
+        this.checkExistingTask(); // 检查是否有正在进行的任务
+    }
+
+    // 检查是否有正在进行的任务
+    checkExistingTask() {
+        const taskId = localStorage.getItem('currentTaskId');
+        if (taskId) {
+            console.log('发现未完成的任务:', taskId);
+            // 立即检查任务状态，不管当前在哪个页面
+            this.checkTaskStatusInBackground(taskId);
+
+            // 如果在首页，立即显示生成状态
+            if (window.location.pathname === '/' || window.location.pathname === '/index') {
+                this.showGeneratingStatus(true);
+                // 更新一次进度以获取最新状态
+                fetch(`/api/generate/progress/${taskId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success && data.progress !== undefined && data.stage) {
+                            this.updateProgressBar(data.progress, data.stage);
+                        }
+                    })
+                    .catch(err => console.error('获取任务状态失败:', err));
+            }
+        }
     }
 
     bindEvents() {
@@ -443,14 +461,17 @@ class ZImageApp {
             return;
         }
 
-        // 更新步骤指示器 - 进入步骤3（生成）
-        this.updateStepForGeneration();
+        // 保存当前输入到sessionStorage
+        this.saveFormData();
 
         // 收集生成参数
         const params = this.collectGenerationParams(prompt);
 
-        // 显示加载动画和进度条 - 与后端进度阶段一致
-        this.showLoading('正在生成图片...', '准备中...');
+        // 计算预估时间
+        const estimatedTime = this.estimateGenerationTime(params);
+
+        // 显示生成状态（不阻塞页面）
+        this.showGeneratingStatus(true, estimatedTime);
 
         try {
             // 启动生成任务
@@ -458,21 +479,200 @@ class ZImageApp {
 
             if (data.success) {
                 const taskId = data.task_id;
-                // 开始轮询进度
-                this.pollProgress(taskId);
+                // 保存任务ID到localStorage，以便跨页面查询
+                localStorage.setItem('currentTaskId', taskId);
+
+                // 显示通知，不阻塞用户操作
+                this.showNotification(`✅ 已开始生成，预计需要 ${estimatedTime}`, 'success');
+
+                // 启动后台状态检查（不显示弹窗）
+                this.checkTaskStatusInBackground(taskId);
             } else {
-                this.hideLoading();
+                this.showGeneratingStatus(false);
                 this.updateStatusOutput(data.message, 'error');
                 this.showNotification('❌ 生成失败', 'error');
-                // 回退步骤
-                this.revertStepFromGeneration();
             }
         } catch (error) {
             console.error('生成图片失败:', error);
-            this.hideLoading();
+            this.showGeneratingStatus(false);
             this.updateStatusOutput('❌ 网络错误，请检查连接', 'error');
             this.showNotification('❌ 网络错误', 'error');
-            this.revertStepFromGeneration();
+        }
+    }
+
+    // 显示生成状态（在页面内）
+    showGeneratingStatus(isGenerating, estimate = '') {
+        const generateBtn = DOM.generateBtn;
+        const progressContainer = document.getElementById('progressContainer');
+        const imagePreview = DOM.imagePreview;
+
+        if (isGenerating) {
+            // 更新按钮状态
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+
+            // 显示进度条，隐藏图片预览
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+            }
+            if (imagePreview) {
+                imagePreview.style.display = 'none';
+            }
+
+            // 初始化进度条
+            this.updateProgressBar(0, '准备生成...');
+        } else {
+            // 恢复按钮状态
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-magic"></i> 开始生成图片';
+
+            // 隐藏进度条，显示图片预览
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+            if (imagePreview) {
+                imagePreview.style.display = 'flex';
+            }
+        }
+    }
+
+    // 更新进度条
+    updateProgressBar(progress, status) {
+        const progressBar = document.getElementById('progressBar');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const progressStatus = document.getElementById('progressStatus');
+
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+
+            // 根据状态设置进度条的颜色
+            let stage = 'generating';
+            if (status.includes('优化')) {
+                stage = 'optimizing';
+            } else if (status.includes('准备')) {
+                stage = 'preparing';
+            } else if (status.includes('保存')) {
+                stage = 'saving';
+            }
+            progressBar.setAttribute('data-stage', stage);
+        }
+
+        if (progressPercentage) {
+            progressPercentage.textContent = `${progress}%`;
+        }
+
+        if (progressStatus) {
+            progressStatus.textContent = status;
+        }
+    }
+
+    // 后台检查任务状态（不显示弹窗）
+    checkTaskStatusInBackground(taskId) {
+        const pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/generate/progress/${taskId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    // 如果当前在首页，更新进度条
+                    const isOnHomePage = window.location.pathname === '/' || window.location.pathname === '/index';
+
+                    // 更新进度条（如果存在进度数据）
+                    if (data.progress !== undefined && data.stage && isOnHomePage) {
+                        this.updateProgressBar(data.progress, data.stage);
+                    }
+
+                    if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        localStorage.removeItem('currentTaskId');
+
+                        // 显示完成通知
+                        this.showNotification('🎉 图片生成完成！', 'success');
+
+                        // 如果当前在首页，显示结果
+                        if (isOnHomePage) {
+                            this.showGeneratingStatus(false);
+                            this.handleGenerationSuccess(data);
+                        } else {
+                            // 如果在其他页面，提示用户
+                            this.showNotification('🎉 图片已生成完成，请返回首页查看', 'success');
+                        }
+                    } else if (data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        localStorage.removeItem('currentTaskId');
+
+                        // 只在首页时隐藏进度条
+                        if (isOnHomePage) {
+                            this.showGeneratingStatus(false);
+                            this.updateStatusOutput(data.message, 'error');
+                        }
+
+                        this.showNotification('❌ 生成失败', 'error');
+                    }
+                    // 如果状态是 generating、optimizing、preparing、saving，继续轮询
+                    // 如果返回首页时任务正在进行，确保进度条可见
+                    else if (isOnHomePage && ['generating', 'optimizing', 'preparing', 'saving', 'pending'].includes(data.status)) {
+                        const progressContainer = document.getElementById('progressContainer');
+                        const imagePreview = DOM.imagePreview;
+
+                        if (progressContainer && progressContainer.style.display === 'none') {
+                            progressContainer.style.display = 'block';
+                        }
+                        if (imagePreview && imagePreview.style.display === 'flex') {
+                            imagePreview.style.display = 'none';
+                        }
+
+                        // 更新进度
+                        if (data.progress !== undefined && data.stage) {
+                            this.updateProgressBar(data.progress, data.stage);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('检查任务状态失败:', error);
+                clearInterval(pollInterval);
+                localStorage.removeItem('currentTaskId');
+
+                // 只在首页时隐藏进度条
+                if (window.location.pathname === '/' || window.location.pathname === '/index') {
+                    this.showGeneratingStatus(false);
+                }
+            }
+        }, 1000); // 每1秒检查一次，以获得更实时的进度更新
+    }
+
+    // 估算生成时间（基于优化模式、图片尺寸和步数）
+    estimateGenerationTime(params) {
+        const width = params.width;
+        const height = params.height;
+        const steps = params.steps;
+        const optimizationMode = params.optimization_mode;
+
+        // 基准时间：1024x1024, 9步, basic模式约10秒
+        const baseTime = 10; // 秒
+
+        // 计算像素比例
+        const pixelRatio = (width * height) / (1024 * 1024);
+
+        // 计算步数比例
+        const stepsRatio = steps / 9;
+
+        // 优化模式系数
+        let modeFactor = 1.0;
+        if (optimizationMode === 'lowvram') {
+            modeFactor = 1.2; // 低显存模式稍慢
+        }
+
+        // 计算预估时间（秒）
+        const estimatedSeconds = baseTime * pixelRatio * stepsRatio * modeFactor;
+
+        // 格式化时间显示
+        if (estimatedSeconds < 60) {
+            return `约 ${Math.ceil(estimatedSeconds)} 秒`;
+        } else {
+            const minutes = Math.floor(estimatedSeconds / 60);
+            const seconds = Math.ceil(estimatedSeconds % 60);
+            return `约 ${minutes} 分 ${seconds} 秒`;
         }
     }
 
@@ -498,56 +698,57 @@ class ZImageApp {
         }
     }
 
-    // 轮询生成进度
-    async pollProgress(taskId) {
-        const pollInterval = setInterval(async () => {
-            try {
-                const response = await fetch(`/api/generate/progress/${taskId}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    // 更新进度
-                    this.updateProgress(data.progress, data.stage);
-
-                    if (data.status === 'completed') {
-                        clearInterval(pollInterval);
-                        this.hideLoading();
-                        this.handleGenerationSuccess(data);
-                    } else if (data.status === 'failed') {
-                        clearInterval(pollInterval);
-                        this.hideLoading();
-                        this.updateStatusOutput(data.message, 'error');
-                        this.showNotification('❌ 生成失败', 'error');
-                    }
-                }
-            } catch (error) {
-                console.error('查询进度失败:', error);
-                clearInterval(pollInterval);
-                this.hideLoading();
-                this.updateStatusOutput('❌ 查询进度失败', 'error');
-            }
-        }, 500); // 每500ms查询一次
+    // 保存表单数据到sessionStorage
+    saveFormData() {
+        const formData = {
+            prompt: document.getElementById('promptInput').value,
+            resolutionPreset: document.getElementById('resolutionPreset').value,
+            width: document.getElementById('width').value,
+            height: document.getElementById('height').value,
+            steps: document.getElementById('steps').value,
+            filename: document.getElementById('filename').value,
+            optimizationMode: document.getElementById('optimizationMode').value,
+            artStyle: document.getElementById('artStyle').value,
+            character: document.getElementById('character').value,
+            pose: document.getElementById('pose').value,
+            background: document.getElementById('background').value,
+            clothing: document.getElementById('clothing').value,
+            lighting: document.getElementById('lighting').value,
+            composition: document.getElementById('composition').value,
+            details: document.getElementById('details').value
+        };
+        sessionStorage.setItem('imageGenFormData', JSON.stringify(formData));
     }
 
-    // 更新进度条 - 实时精准显示
-    updateProgress(progress, stage) {
-        const progressBar = document.getElementById('progressBar');
-        const progressTextOverlay = document.getElementById('progressTextOverlay');
-        const progressPercentage = document.getElementById('progressPercentage');
-        const progressStage = document.getElementById('progressStage');
-        const loadingSubtext = document.getElementById('loadingSubtext');
+    // 从sessionStorage恢复表单数据
+    loadFormData() {
+        const savedData = sessionStorage.getItem('imageGenFormData');
+        if (savedData) {
+            try {
+                const formData = JSON.parse(savedData);
+                if (formData.prompt) document.getElementById('promptInput').value = formData.prompt;
+                if (formData.resolutionPreset) document.getElementById('resolutionPreset').value = formData.resolutionPreset;
+                if (formData.width) document.getElementById('width').value = formData.width;
+                if (formData.height) document.getElementById('height').value = formData.height;
+                if (formData.steps) {
+                    document.getElementById('steps').value = formData.steps;
+                    document.getElementById('stepsValue').textContent = formData.steps;
+                }
+                if (formData.filename) document.getElementById('filename').value = formData.filename;
+                if (formData.optimizationMode) document.getElementById('optimizationMode').value = formData.optimizationMode;
+                if (formData.artStyle) document.getElementById('artStyle').value = formData.artStyle;
+                if (formData.character) document.getElementById('character').value = formData.character;
+                if (formData.pose) document.getElementById('pose').value = formData.pose;
+                if (formData.background) document.getElementById('background').value = formData.background;
+                if (formData.clothing) document.getElementById('clothing').value = formData.clothing;
+                if (formData.lighting) document.getElementById('lighting').value = formData.lighting;
+                if (formData.composition) document.getElementById('composition').value = formData.composition;
+                if (formData.details) document.getElementById('details').value = formData.details;
 
-        // 更新进度条宽度
-        progressBar.style.width = `${progress}%`;
-
-        // 更新所有进度文本
-        progressTextOverlay.textContent = `${progress}%`;
-        progressPercentage.textContent = `${progress}%`;
-
-        // 更新阶段描述
-        if (stage) {
-            progressStage.textContent = stage;
-            loadingSubtext.textContent = stage;
+                console.log('✅ 已恢复用户输入数据');
+            } catch (error) {
+                console.error('恢复表单数据失败:', error);
+            }
         }
     }
 
@@ -687,16 +888,12 @@ class ZImageApp {
     showLoading(text = '正在处理...', subtext = '请稍候') {
         DOM.loadingText.textContent = text;
         DOM.loadingSubtext.textContent = subtext;
-        DOM.progressBar.style.width = '0%';
-        if (DOM.progressTextOverlay) {
-            DOM.progressTextOverlay.textContent = '0%';
-        }
-        if (DOM.progressPercentage) {
-            DOM.progressPercentage.textContent = '0%';
-        }
-        if (DOM.progressStage) {
-            DOM.progressStage.textContent = subtext;
-        }
+        DOM.loadingOverlay.style.display = 'flex';
+    }
+
+    showLoadingWithEstimate(text = '正在处理...', estimate = '请稍候') {
+        DOM.loadingText.textContent = text;
+        DOM.loadingSubtext.textContent = estimate;
         DOM.loadingOverlay.style.display = 'flex';
     }
 
