@@ -61,6 +61,11 @@ Thumbs.db
 models/
 gallery/
 .gradio/
+archive/
+
+# Keep example config but ignore real config
+config.json
+!config.example.json
 
 # Jupyter Notebook
 .ipynb_checkpoints
