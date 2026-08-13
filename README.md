@@ -50,7 +50,7 @@
 
 ### 前提条件
 
-1. **Python 3.8+** 已安装
+1. **Python 3.10+** 已安装
 2. **虚拟环境已创建** (venv目录)
 3. **模型已下载** (models/Z-Image-Turbo)
 4. **依赖已安装**
@@ -156,10 +156,7 @@ source venv/bin/activate
 # 安装 PyTorch (CUDA 版本)
 pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126
 
-# 安装最新版 diffusers (必须从源码安装以支持 Z-Image)
-pip install --upgrade git+https://github.com/huggingface/diffusers transformers accelerate
-
-# 安装其他依赖
+# 安装其余已锁定版本的依赖（包含支持 Z-Image 的 diffusers 提交）
 pip install -r requirements.txt
 ```
 
@@ -282,7 +279,8 @@ python -c "import diffusers; print(f'diffusers版本: {diffusers.__version__}')"
   "default_filename": "generated_image.png",
   "deepseek_api_key": "your_api_key_here",
   "gallery_dir": "gallery",
-  "flask_host": "0.0.0.0",
+  "gallery_page_size": 24,
+  "flask_host": "127.0.0.1",
   "flask_port": 5000,
   "flask_debug": false
 }
@@ -294,8 +292,9 @@ python -c "import diffusers; print(f'diffusers版本: {diffusers.__version__}')"
 |--------|------|--------|
 | `DEEPSEEK_API_KEY` | DeepSeek API密钥 | 无 |
 | `MODEL_PATH` | 模型文件路径 | models/Z-Image-Turbo |
-| `FLASK_HOST` | Flask服务器地址 | 0.0.0.0 |
+| `FLASK_HOST` | Flask服务器地址 | 127.0.0.1（仅本机访问） |
 | `FLASK_PORT` | Flask服务器端口 | 5000 |
+| `FLASK_DEBUG` | Flask调试模式 | false |
 | `DEFAULT_WIDTH` | 默认图片宽度 | 1024 |
 | `DEFAULT_HEIGHT` | 默认图片高度 | 1024 |
 | `DEFAULT_STEPS` | 默认生成步数 | 9 |
@@ -309,12 +308,11 @@ python -c "import diffusers; print(f'diffusers版本: {diffusers.__version__}')"
 
 #### 1. 导入错误: `cannot import name 'ZImagePipeline'`
 
-**原因**: diffusers 版本过旧
+**原因**: diffusers 或 transformers 版本与模型不匹配
 
 **解决方案**:
 ```bash
-pip uninstall diffusers
-pip install git+https://github.com/huggingface/diffusers
+pip install --upgrade --force-reinstall -r requirements.txt
 ```
 
 #### 2. 显存不足错误 (CUDA out of memory)

@@ -8,9 +8,9 @@
   "deepseek_api_key": "",
   "deepseek_base_url": "https://api.deepseek.com/v1/chat/completions",
   "gallery_dir": "gallery",
+  "gallery_page_size": 24,
   "offload_folder": "offload",
-  "enable_attention_slicing": true,
-  "attention_slicing_size": "max",
-  "webui_port": 7860,
-  "webui_share": false
+  "flask_host": "127.0.0.1",
+  "flask_port": 5000,
+  "flask_debug": false
 }

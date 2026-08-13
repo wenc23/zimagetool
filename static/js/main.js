@@ -5,6 +5,7 @@ const DOM = {
     loadModelBtn: null,
     unloadModelBtn: null,
     generateBtn: null,
+    cancelGenerationBtn: null,
     optimizePromptBtn: null,
     useOptimizedBtn: null,
     cancelEditBtn: null,
@@ -26,6 +27,7 @@ const DOM = {
         this.loadModelBtn = document.getElementById('loadModelBtn');
         this.unloadModelBtn = document.getElementById('unloadModelBtn');
         this.generateBtn = document.getElementById('generateBtn');
+        this.cancelGenerationBtn = document.getElementById('cancelGenerationBtn');
         this.optimizePromptBtn = document.getElementById('optimizePromptBtn');
         this.useOptimizedBtn = document.getElementById('useOptimizedBtn');
         this.cancelEditBtn = document.getElementById('cancelEditBtn');
@@ -52,6 +54,8 @@ class ZImageApp {
         this.currentFilePath = null;
         this.optimizedPrompt = '';
         this.progressInterval = null;
+        this.taskPollTimer = null;
+        this.pollingTaskId = null;
         this.init();
     }
 
@@ -76,15 +80,6 @@ class ZImageApp {
             // 如果在首页，立即显示生成状态
             if (window.location.pathname === '/' || window.location.pathname === '/index') {
                 this.showGeneratingStatus(true);
-                // 更新一次进度以获取最新状态
-                fetch(`/api/generate/progress/${taskId}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success && data.progress !== undefined && data.stage) {
-                            this.updateProgressBar(data.progress, data.stage);
-                        }
-                    })
-                    .catch(err => console.error('获取任务状态失败:', err));
             }
         }
     }
@@ -95,6 +90,7 @@ class ZImageApp {
             'loadModelBtn': 'loadModel',
             'unloadModelBtn': 'unloadModel',
             'generateBtn': 'generateImage',
+            'cancelGenerationBtn': 'cancelGeneration',
             'optimizePromptBtn': 'optimizePrompt',
             'useOptimizedBtn': 'useOptimizedPrompt',
             'cancelEditBtn': 'cancelEdit',
@@ -227,7 +223,8 @@ class ZImageApp {
                 'width': config.default_width,
                 'height': config.default_height,
                 'steps': config.default_steps,
-                'filename': config.default_filename
+                'filename': config.default_filename,
+                'optimizationMode': config.default_optimization_mode
             };
 
             Object.entries(formDefaults).forEach(([id, value]) => {
@@ -236,6 +233,13 @@ class ZImageApp {
         } catch (error) {
             console.error('加载配置失败:', error);
         }
+    }
+
+    setLoadStatus(message, type) {
+        const status = document.createElement('div');
+        status.className = `status-message ${type === 'success' ? 'success' : 'error'}`;
+        status.textContent = message;
+        DOM.loadStatus.replaceChildren(status);
     }
 
     async loadModel() {
@@ -256,16 +260,16 @@ class ZImageApp {
             if (data.success) {
                 this.modelLoaded = true;
                 this.updateModelStatusUI();
-                DOM.loadStatus.innerHTML = `<div class="status-message success">${data.message}</div>`;
+                this.setLoadStatus(data.message, 'success');
                 this.showNotification('✅ 模型加载成功', 'success');
             } else {
-                DOM.loadStatus.innerHTML = `<div class="status-message error">${data.message}</div>`;
+                this.setLoadStatus(data.message, 'error');
                 this.showNotification('❌ 模型加载失败', 'error');
                 this.updateLoadButtonState('error');
             }
         } catch (error) {
             console.error('加载模型失败:', error);
-            DOM.loadStatus.innerHTML = '<div class="status-message error">❌ 网络错误，请检查连接</div>';
+            this.setLoadStatus('❌ 网络错误，请检查连接', 'error');
             this.showNotification('❌ 网络错误', 'error');
             this.updateLoadButtonState('error');
         }
@@ -310,15 +314,15 @@ class ZImageApp {
             if (data.success) {
                 this.modelLoaded = false;
                 this.updateModelStatusUI();
-                DOM.loadStatus.innerHTML = `<div class="status-message success">${data.message}</div>`;
+                this.setLoadStatus(data.message, 'success');
                 this.showNotification('✅ 模型已卸载', 'success');
             } else {
-                DOM.loadStatus.innerHTML = `<div class="status-message error">${data.message}</div>`;
+                this.setLoadStatus(data.message, 'error');
                 this.showNotification('⚠️ ' + data.message, 'error');
             }
         } catch (error) {
             console.error('卸载模型失败:', error);
-            DOM.loadStatus.innerHTML = '<div class="status-message error">❌ 网络错误，请检查连接</div>';
+            this.setLoadStatus('❌ 网络错误，请检查连接', 'error');
             this.showNotification('❌ 网络错误', 'error');
         } finally {
             // 恢复卸载按钮状态
@@ -389,10 +393,11 @@ class ZImageApp {
     showEditablePromptPreview(prompt) {
         DOM.promptPreview.innerHTML = `
             <div class="form-group" style="margin-bottom: 0;">
-                <textarea id="editablePrompt" class="form-control" rows="6">${prompt}</textarea>
+                <textarea id="editablePrompt" class="form-control" rows="6"></textarea>
                 <small class="form-text">您可以编辑提示词，然后点击"使用优化后的提示词"应用到生成</small>
             </div>
         `;
+        document.getElementById('editablePrompt').value = prompt;
         DOM.editPromptActions.style.display = 'flex';
     }
 
@@ -418,12 +423,7 @@ class ZImageApp {
 
     updatePromptPreview(prompt = null, isOptimized = false) {
         if (isOptimized && this.optimizedPrompt) {
-            DOM.promptPreview.innerHTML = `
-                <div style="color: var(--primary-color);">
-                    <strong><i class="fas fa-wand-magic-sparkles"></i> 优化后的提示词:</strong><br>
-                    ${this.optimizedPrompt}
-                </div>
-            `;
+            this.renderPromptPreview('优化后的提示词:', this.optimizedPrompt, true);
             return;
         }
 
@@ -432,12 +432,7 @@ class ZImageApp {
         }
 
         if (prompt.trim()) {
-            DOM.promptPreview.innerHTML = `
-                <div>
-                    <strong><i class="fas fa-keyboard"></i> 当前提示词:</strong><br>
-                    ${prompt}
-                </div>
-            `;
+            this.renderPromptPreview('当前提示词:', prompt, false);
         } else {
             DOM.promptPreview.innerHTML = `
                 <div class="prompt-placeholder">
@@ -446,6 +441,19 @@ class ZImageApp {
                 </div>
             `;
         }
+    }
+
+    renderPromptPreview(label, prompt, optimized) {
+        const container = document.createElement('div');
+        if (optimized) {
+            container.style.color = 'var(--primary-color)';
+        }
+        const strong = document.createElement('strong');
+        const icon = document.createElement('i');
+        icon.className = optimized ? 'fas fa-wand-magic-sparkles' : 'fas fa-keyboard';
+        strong.append(icon, document.createTextNode(` ${label}`));
+        container.append(strong, document.createElement('br'), document.createTextNode(prompt));
+        DOM.promptPreview.replaceChildren(container);
     }
 
     async generateImage() {
@@ -497,6 +505,56 @@ class ZImageApp {
             this.showGeneratingStatus(false);
             this.updateStatusOutput('❌ 网络错误，请检查连接', 'error');
             this.showNotification('❌ 网络错误', 'error');
+        }
+    }
+
+    async cancelGeneration() {
+        const taskId = localStorage.getItem('currentTaskId');
+
+        if (!taskId) {
+            this.showNotification('❌ 没有正在进行的任务', 'error');
+            return;
+        }
+
+        // 确认取消
+        if (!confirm('确定要取消当前生成任务吗？')) {
+            return;
+        }
+
+        try {
+            // 更新按钮状态
+            DOM.cancelGenerationBtn.disabled = true;
+            DOM.cancelGenerationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 取消中...';
+
+            const response = await fetch('/api/generate/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.showNotification('✅ 任务已取消', 'success');
+
+                // 立即隐藏生成状态
+                this.showGeneratingStatus(false);
+
+                // 清除任务ID
+                localStorage.removeItem('currentTaskId');
+
+                // 显示取消消息
+                this.updateStatusOutput('❌ 任务已被取消', 'error');
+            } else {
+                this.showNotification('❌ ' + data.message, 'error');
+            }
+        } catch (error) {
+            console.error('取消任务失败:', error);
+            this.showNotification('❌ 网络错误', 'error');
+        } finally {
+            // 恢复取消按钮状态
+            DOM.cancelGenerationBtn.disabled = false;
+            DOM.cancelGenerationBtn.innerHTML = '<i class="fas fa-times"></i> 取消生成';
         }
     }
 
@@ -568,10 +626,29 @@ class ZImageApp {
 
     // 后台检查任务状态（不显示弹窗）
     checkTaskStatusInBackground(taskId) {
-        const pollInterval = setInterval(async () => {
+        // 使用串行 setTimeout，避免网络或磁盘变慢时 setInterval 产生重叠请求。
+        if (this.pollingTaskId === taskId) return;
+        if (this.taskPollTimer) clearTimeout(this.taskPollTimer);
+        this.pollingTaskId = taskId;
+        let consecutiveFailures = 0;
+
+        const stopPolling = () => {
+            if (this.taskPollTimer) clearTimeout(this.taskPollTimer);
+            this.taskPollTimer = null;
+            this.pollingTaskId = null;
+        };
+
+        const scheduleNext = (status, overrideDelay = null) => {
+            const delays = { saving: 450, generating: 800, preparing: 1000, optimizing: 1400, pending: 1400 };
+            const delay = overrideDelay ?? delays[status] ?? 1200;
+            this.taskPollTimer = setTimeout(poll, delay);
+        };
+
+        const poll = async () => {
             try {
-                const response = await fetch(`/api/generate/progress/${taskId}`);
+                const response = await fetch(`/api/generate/progress/${taskId}`, { cache: 'no-store' });
                 const data = await response.json();
+                consecutiveFailures = 0;
 
                 if (data.success) {
                     // 如果当前在首页，更新进度条
@@ -583,7 +660,7 @@ class ZImageApp {
                     }
 
                     if (data.status === 'completed') {
-                        clearInterval(pollInterval);
+                        stopPolling();
                         localStorage.removeItem('currentTaskId');
 
                         // 显示完成通知
@@ -598,7 +675,7 @@ class ZImageApp {
                             this.showNotification('🎉 图片已生成完成，请返回首页查看', 'success');
                         }
                     } else if (data.status === 'failed') {
-                        clearInterval(pollInterval);
+                        stopPolling();
                         localStorage.removeItem('currentTaskId');
 
                         // 只在首页时隐藏进度条
@@ -608,6 +685,17 @@ class ZImageApp {
                         }
 
                         this.showNotification('❌ 生成失败', 'error');
+                    } else if (data.status === 'cancelled') {
+                        stopPolling();
+                        localStorage.removeItem('currentTaskId');
+
+                        // 只在首页时隐藏进度条
+                        if (isOnHomePage) {
+                            this.showGeneratingStatus(false);
+                            this.updateStatusOutput('❌ 任务已被取消', 'error');
+                        }
+
+                        this.showNotification('🚫 任务已被取消', 'info');
                     }
                     // 如果状态是 generating、optimizing、preparing、saving，继续轮询
                     // 如果返回首页时任务正在进行，确保进度条可见
@@ -627,18 +715,32 @@ class ZImageApp {
                             this.updateProgressBar(data.progress, data.stage);
                         }
                     }
+                    if (!['completed', 'failed', 'cancelled'].includes(data.status)) {
+                        scheduleNext(data.status);
+                    }
+                } else if (response.status === 404) {
+                    stopPolling();
+                    localStorage.removeItem('currentTaskId');
+                    this.showGeneratingStatus(false);
+                } else {
+                    scheduleNext('pending', 1800);
                 }
             } catch (error) {
                 console.error('检查任务状态失败:', error);
-                clearInterval(pollInterval);
-                localStorage.removeItem('currentTaskId');
-
-                // 只在首页时隐藏进度条
-                if (window.location.pathname === '/' || window.location.pathname === '/index') {
-                    this.showGeneratingStatus(false);
+                consecutiveFailures += 1;
+                if (consecutiveFailures <= 3) {
+                    scheduleNext('pending', Math.min(1000 * 2 ** consecutiveFailures, 5000));
+                } else {
+                    stopPolling();
+                    if (window.location.pathname === '/' || window.location.pathname === '/index') {
+                        this.showGeneratingStatus(false);
+                    }
+                    this.showNotification('任务状态连接已中断，请刷新页面重试', 'error');
                 }
             }
-        }, 1000); // 每1秒检查一次，以获得更实时的进度更新
+        };
+
+        poll();
     }
 
     // 估算生成时间（基于优化模式、图片尺寸和步数）
@@ -659,7 +761,7 @@ class ZImageApp {
 
         // 优化模式系数
         let modeFactor = 1.0;
-        if (optimizationMode === 'lowvram') {
+        if (optimizationMode === 'low_vram') {
             modeFactor = 1.2; // 低显存模式稍慢
         }
 
@@ -826,11 +928,12 @@ class ZImageApp {
     }
 
     displayImage(imageUrl) {
-        DOM.imagePreview.innerHTML = `
-            <img src="${imageUrl}" alt="生成的图片" style="opacity: 0; transition: opacity 0.3s ease;">
-        `;
-
-        const img = DOM.imagePreview.querySelector('img');
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = '生成的图片';
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.3s ease';
+        DOM.imagePreview.replaceChildren(img);
 
         const showImage = () => { img.style.opacity = '1'; };
         const showError = () => {
@@ -852,12 +955,16 @@ class ZImageApp {
 
     updateStatusOutput(message, type = 'success') {
         const icon = type === 'error' ? 'exclamation-circle' : 'check-circle';
-        DOM.statusOutput.innerHTML = `
-            <div class="${type === 'error' ? 'text-danger' : 'text-success'}">
-                <i class="fas fa-${icon}"></i>
-                ${message.replace(/\n/g, '<br>')}
-            </div>
-        `;
+        const container = document.createElement('div');
+        container.className = type === 'error' ? 'text-danger' : 'text-success';
+        const iconElement = document.createElement('i');
+        iconElement.className = `fas fa-${icon}`;
+        container.append(iconElement, document.createTextNode(' '));
+        String(message).split('\n').forEach((line, index) => {
+            if (index > 0) container.append(document.createElement('br'));
+            container.append(document.createTextNode(line));
+        });
+        DOM.statusOutput.replaceChildren(container);
     }
 
     downloadImage() {
@@ -914,12 +1021,14 @@ class ZImageApp {
             info: 'info-circle'
         };
 
+        type = Object.hasOwn(icons, type) ? type : 'info';
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
-        notification.innerHTML = `
-            <i class="fas fa-${icons[type]}"></i>
-            <span>${message}</span>
-        `;
+        const icon = document.createElement('i');
+        icon.className = `fas fa-${icons[type]}`;
+        const text = document.createElement('span');
+        text.textContent = message;
+        notification.append(icon, text);
 
         document.body.appendChild(notification);
 
@@ -941,11 +1050,17 @@ class ZImageApp {
 // 全局函数：切换手风琴
 function toggleAccordion(id) {
     const content = document.getElementById(id);
-    const icon = content.previousElementSibling.querySelector('.accordion-icon');
+    if (!content) return;
+    const trigger = content.previousElementSibling;
+    const icon = trigger?.querySelector('.accordion-icon');
 
     content.classList.toggle('active');
-    icon.classList.toggle('fa-chevron-down');
-    icon.classList.toggle('fa-chevron-up');
+    const expanded = content.classList.contains('active');
+    trigger?.setAttribute('aria-expanded', String(expanded));
+    if (icon) {
+        icon.classList.toggle('fa-chevron-down', !expanded);
+        icon.classList.toggle('fa-chevron-up', expanded);
+    }
 }
 
 // 初始化应用

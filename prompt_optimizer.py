@@ -8,6 +8,11 @@ import json
 from config_manager import config_manager
 
 
+# 复用 HTTPS 连接，连续润色提示词时避免重复 TLS 握手。
+http_session = requests.Session()
+http_adapter = requests.adapters.HTTPAdapter(pool_connections=2, pool_maxsize=4, max_retries=0)
+http_session.mount("https://", http_adapter)
+
 def optimize_with_custom_input(
     prompt,
     art_style="",
@@ -73,7 +78,7 @@ def optimize_with_custom_input(
             "max_tokens": 500
         }
 
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        response = http_session.post(api_url, headers=headers, json=payload, timeout=(5, 30))
 
         if response.status_code == 200:
             result = response.json()

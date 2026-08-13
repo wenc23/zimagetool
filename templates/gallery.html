@@ -1,1029 +1,237 @@
 {% extends "layout.html" %}
 
-{% block title %}图片画廊 - Z-Image-Turbo{% endblock %}
+{% block title %}作品库 · Z/Studio{% endblock %}
 
 {% block content %}
-<!-- 面包屑导航 -->
-<nav class="breadcrumb-nav mb-4">
-    <div class="d-flex gap-2 align-center">
-        <a href="{{ url_for('index') }}" class="breadcrumb-item">
-            <i class="fas fa-home"></i> 首页
-        </a>
-        <i class="fas fa-chevron-right breadcrumb-separator"></i>
-        <span class="breadcrumb-item active">
-            <i class="fas fa-images"></i> 图片画廊
-        </span>
+<section class="gallery-hero">
+    <div>
+        <span class="eyebrow">GENERATED ARCHIVE</span>
+        <h1>作品库。</h1>
+        <p>每一次生成都保存在本地。浏览、下载，或整理你的视觉实验。</p>
     </div>
+    <div class="gallery-count">{{ "%02d"|format(total_images) }}<small>WORKS / TOTAL</small></div>
+</section>
+
+<div class="gallery-toolbar">
+    <div class="toolbar-label"><span></span> LOCAL ARCHIVE ONLINE</div>
+    <div class="gallery-actions">
+        <div id="batchActions" class="batch-actions d-none">
+            <button id="batchSelectAll" class="btn btn-outline btn-sm" type="button"><i class="fas fa-check-double"></i> 全选</button>
+            <button id="batchDelete" class="btn btn-danger btn-sm" type="button"><i class="fas fa-trash"></i> 删除 <span id="selectedCount">0</span></button>
+            <button id="batchCancel" class="btn btn-outline btn-sm" type="button"><i class="fas fa-xmark"></i> 退出</button>
+        </div>
+        <div id="normalActions" class="normal-actions">
+            {% if images %}<button id="enableBatchMode" class="btn btn-outline btn-sm" type="button"><i class="fas fa-list-check"></i> 批量管理</button>{% endif %}
+            <button id="refreshGallery" class="btn btn-outline btn-sm" type="button"><i class="fas fa-rotate"></i> 刷新</button>
+            <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> 新建作品</a>
+        </div>
+    </div>
+</div>
+
+{% if images %}
+<section class="gallery-grid" id="galleryGrid" aria-label="生成作品">
+    {% for image in images %}
+    <article class="gallery-card" data-folder="{{ image.folder }}">
+        <label class="batch-select-checkbox d-none" title="选择 {{ image.name }}">
+            <input type="checkbox" class="image-checkbox" data-folder="{{ image.folder }}" aria-label="选择 {{ image.name }}">
+        </label>
+        <div class="gallery-image-wrapper">
+            <img src="{{ url_for('serve_gallery_thumbnail', folder_name=image.folder) }}" alt="{{ image.name }}" loading="lazy" decoding="async">
+            <div class="gallery-overlay">
+                <div class="overlay-buttons">
+                    <button class="btn btn-primary btn-sm view-details" type="button" data-image='{{ image|tojson }}' data-folder="{{ image.folder }}"><i class="fas fa-expand"></i> 查看作品</button>
+                    <a href="{{ image.path }}" class="btn btn-outline btn-sm btn-icon" download title="下载 {{ image.name }}"><i class="fas fa-arrow-down"></i></a>
+                    <button class="btn btn-danger btn-sm btn-icon delete-image" type="button" data-folder="{{ image.folder }}" title="删除 {{ image.name }}"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        </div>
+        <div class="gallery-card-meta">
+            <strong title="{{ image.name }}">{{ image.name }}</strong>
+            <span>#{{ "%02d"|format(loop.index) }}</span>
+        </div>
+    </article>
+    {% endfor %}
+</section>
+{% if total_pages > 1 %}
+<nav class="gallery-pagination" aria-label="作品分页">
+    {% if page > 1 %}<a class="btn btn-outline" href="{{ url_for('gallery', page=page-1) }}"><i class="fas fa-arrow-left"></i> 上一页</a>{% else %}<span></span>{% endif %}
+    <span class="pagination-status"><strong>{{ "%02d"|format(page) }}</strong> / {{ "%02d"|format(total_pages) }}</span>
+    {% if page < total_pages %}<a class="btn btn-outline" href="{{ url_for('gallery', page=page+1) }}">下一页 <i class="fas fa-arrow-right"></i></a>{% else %}<span></span>{% endif %}
 </nav>
-
-<div class="gallery-page">
-    <div class="gallery-header">
-        <div class="d-flex justify-between align-center flex-wrap gap-3">
-            <div>
-                <h1><i class="fas fa-images"></i> 图片画廊</h1>
-                <p class="subtitle">浏览和管理所有生成的图片</p>
-            </div>
-            <div class="gallery-actions d-flex gap-2 flex-wrap">
-                <!-- 批量操作按钮组 -->
-                <div id="batchActions" class="batch-actions d-none gap-2">
-                    <button id="batchSelectAll" class="btn btn-outline btn-sm">
-                        <i class="fas fa-check-double"></i> 全选
-                    </button>
-                    <button id="batchDelete" class="btn btn-danger btn-sm">
-                        <i class="fas fa-trash"></i> 删除选中 (<span id="selectedCount">0</span>)
-                    </button>
-                    <button id="batchCancel" class="btn btn-outline btn-sm">
-                        <i class="fas fa-times"></i> 取消选择
-                    </button>
-                </div>
-                <!-- 普通操作按钮 -->
-                <div id="normalActions" class="normal-actions d-flex gap-2">
-                    <button id="enableBatchMode" class="btn btn-outline btn-sm">
-                        <i class="fas fa-check-square"></i> 批量管理
-                    </button>
-                    <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-plus"></i> 生成新图片
-                    </a>
-                    <button id="refreshGallery" class="btn btn-outline btn-sm">
-                        <i class="fas fa-sync-alt"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </div>
-        <!-- 统计信息 -->
-        <div class="gallery-stats mt-3">
-            <div class="stat-badge">
-                <i class="fas fa-image"></i>
-                <span>共 {{ images|length }} 张图片</span>
-            </div>
-        </div>
+{% endif %}
+{% else %}
+<section class="empty-gallery">
+    <div>
+        <span class="empty-mark"><i class="fas fa-layer-group"></i></span>
+        <h2>这里还没有作品</h2>
+        <p>从一句描述开始，创建你的第一幅本地图像。</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary btn-large"><i class="fas fa-wand-magic-sparkles"></i> 开始创作</a>
     </div>
+</section>
+{% endif %}
 
-    {% if images %}
-    <div class="gallery-grid" id="galleryGrid">
-        {% for image in images %}
-        <div class="gallery-card" data-folder="{{ image.folder }}">
-            <!-- 批量选择复选框 -->
-            <div class="batch-select-checkbox d-none">
-                <input type="checkbox" class="image-checkbox" data-folder="{{ image.folder }}">
+<div id="imageModal" class="image-modal" role="dialog" aria-modal="true" aria-labelledby="modalImageName">
+    <div class="modal-shell">
+        <div class="modal-visual"><img id="modalImage" src="" alt="作品大图"></div>
+        <aside class="modal-panel">
+            <div class="modal-head">
+                <div><span class="section-index">ARTWORK DETAILS</span><h2 id="modalImageName">作品详情</h2></div>
+                <button id="modalCloseBtn" class="modal-close" type="button" aria-label="关闭详情"><i class="fas fa-xmark"></i></button>
             </div>
-
-            <div class="gallery-image-wrapper">
-                <img src="{{ image.path }}" alt="{{ image.name }}" loading="lazy">
-
-                <!-- 始终显示的快捷操作按钮（Fitts定律优化） -->
-                <div class="gallery-quick-actions">
-                    <a href="{{ image.path }}" download
-                       class="btn btn-secondary btn-sm btn-quick-action"
-                       title="下载图片">
-                        <i class="fas fa-download"></i>
-                    </a>
-                </div>
-
-                <!-- 悬停时显示的详细操作 -->
-                <div class="gallery-overlay">
-                    <div class="overlay-buttons">
-                        <button class="btn btn-light btn-sm view-details"
-                                data-image='{{ image|tojson }}'
-                                data-folder="{{ image.folder }}"
-                                title="查看详情">
-                            <i class="fas fa-info-circle"></i>
-                        </button>
-                        <a href="{{ image.path }}" download
-                           class="btn btn-secondary btn-sm"
-                           title="下载图片">
-                            <i class="fas fa-download"></i>
-                        </a>
-                        <button class="btn btn-danger btn-sm delete-image"
-                                data-folder="{{ image.folder }}"
-                                title="删除图片">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
+            <div id="modalImageInfo" class="modal-image-info"></div>
+            <div class="modal-actions">
+                <a id="modalDownloadBtn" class="btn btn-secondary" href="#" download><i class="fas fa-arrow-down"></i> 下载</a>
+                <button id="modalDeleteBtn" class="btn btn-danger" type="button"><i class="fas fa-trash"></i> 删除</button>
             </div>
-
-            <!-- 增强的信息展示 -->
-            <div class="gallery-info">
-                <h4 class="image-name" title="{{ image.name }}">{{ image.name }}</h4>
-                <div class="image-meta">
-                    <div class="meta-item">
-                        <i class="fas fa-folder"></i>
-                        <span>{{ image.folder }}</span>
-                    </div>
-                    {% if image.info %}
-                    {% if image.info.width %}
-                    <div class="meta-item">
-                        <i class="fas fa-expand-arrows-alt"></i>
-                        <span>{{ image.info.width }}×{{ image.info.height }}</span>
-                    </div>
-                    {% endif %}
-                    {% if image.info.steps %}
-                    <div class="meta-item">
-                        <i class="fas fa-layer-group"></i>
-                        <span>{{ image.info.steps }}步</span>
-                    </div>
-                    {% endif %}
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-gallery">
-        <div class="empty-content">
-            <i class="fas fa-image fa-5x"></i>
-            <h2>画廊为空</h2>
-            <p>还没有生成任何图片，快去生成第一张图片吧！</p>
-            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">
-                <i class="fas fa-magic"></i> 开始生成
-            </a>
-        </div>
-    </div>
-    {% endif %}
-</div>
-
-<!-- 图片详情模态框 -->
-<div id="imageModal" class="modal" style="display: none;">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-info-circle"></i> 图片详情</h3>
-                <button class="modal-close-btn" onclick="closeModal()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="modal-image-section">
-                    <img id="modalImage" src="" alt="">
-                </div>
-                <div class="modal-info-section">
-                    <h4 id="modalImageName"></h4>
-                    <div id="modalImageInfo" class="image-details"></div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <div class="modal-actions d-flex gap-2 justify-between">
-                    <a id="modalDownloadBtn" href="#" download class="btn btn-secondary">
-                        <i class="fas fa-download"></i> 下载图片
-                    </a>
-                    <div class="d-flex gap-2">
-                        <button id="modalDeleteBtn" class="btn btn-danger">
-                            <i class="fas fa-trash"></i> 删除图片
-                        </button>
-                        <button class="btn btn-outline" onclick="closeModal()">
-                            <i class="fas fa-times"></i> 关闭
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </aside>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    let currentFolder = null;
-    let batchMode = false;
-    let selectedImages = new Set();
+    (function () {
+        const selected = new Set();
+        let currentFolder = null;
+        const modal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalName = document.getElementById('modalImageName');
+        const modalInfo = document.getElementById('modalImageInfo');
+        const modalDownload = document.getElementById('modalDownloadBtn');
 
-    // 刷新按钮
-    document.getElementById('refreshGallery')?.addEventListener('click', function() {
-        window.location.reload();
-    });
+        const setBatchMode = enabled => {
+            document.getElementById('batchActions')?.classList.toggle('d-none', !enabled);
+            document.getElementById('batchActions')?.classList.toggle('d-flex', enabled);
+            document.getElementById('normalActions')?.classList.toggle('d-none', enabled);
+            document.querySelectorAll('.batch-select-checkbox').forEach(item => item.classList.toggle('d-none', !enabled));
+            if (!enabled) clearSelection();
+        };
 
-    // 批量管理模式
-    document.getElementById('enableBatchMode')?.addEventListener('click', function() {
-        batchMode = true;
-        toggleBatchMode(true);
-    });
+        const syncSelection = () => {
+            const count = document.getElementById('selectedCount');
+            if (count) count.textContent = selected.size;
+            document.querySelectorAll('.gallery-card').forEach(card => card.classList.toggle('selected', selected.has(card.dataset.folder)));
+        };
 
-    document.getElementById('batchCancel')?.addEventListener('click', function() {
-        batchMode = false;
-        selectedImages.clear();
-        toggleBatchMode(false);
-        clearAllSelections();
-    });
+        const clearSelection = () => {
+            selected.clear();
+            document.querySelectorAll('.image-checkbox').forEach(box => { box.checked = false; });
+            syncSelection();
+        };
 
-    // 全选按钮
-    document.getElementById('batchSelectAll')?.addEventListener('click', function() {
-        const checkboxes = document.querySelectorAll('.image-checkbox');
-        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-
-        if (allChecked) {
-            // 取消全选
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                selectedImages.delete(cb.dataset.folder);
-                updateCardSelection(cb.dataset.folder, false);
+        async function deleteFolder(folder) {
+            const response = await fetch('/api/gallery/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder_name: folder })
             });
-        } else {
-            // 全选
-            checkboxes.forEach(cb => {
-                cb.checked = true;
-                selectedImages.add(cb.dataset.folder);
-                updateCardSelection(cb.dataset.folder, true);
-            });
-        }
-        updateSelectedCount();
-    });
-
-    // 批量删除按钮
-    document.getElementById('batchDelete')?.addEventListener('click', async function() {
-        if (selectedImages.size === 0) {
-            showNotification('❌ 请先选择要删除的图片', 'error');
-            return;
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.message || '删除失败');
+            return result;
         }
 
-        if (!confirm(`确定要删除选中的 ${selectedImages.size} 张图片吗？`)) {
-            return;
+        function closeModal() {
+            modal?.classList.remove('show');
+            setTimeout(() => { if (modal) modal.style.display = 'none'; }, 250);
+            currentFolder = null;
         }
 
-        try {
-            const promises = Array.from(selectedImages).map(folder =>
-                fetch('/api/gallery/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_name: folder })
-                }).then(res => res.json())
-            );
+        function showDetails(button) {
+            const data = JSON.parse(button.dataset.image);
+            currentFolder = button.dataset.folder;
+            modalImage.src = data.path;
+            modalName.textContent = data.name;
+            modalDownload.href = data.path;
+            modalDownload.download = data.name;
 
-            const results = await Promise.all(promises);
-            const successCount = results.filter(r => r.success).length;
-
-            if (successCount === selectedImages.size) {
-                showNotification(`✅ 成功删除 ${successCount} 张图片`, 'success');
-                setTimeout(() => window.location.reload(), 1000);
+            if (data.info && Object.keys(data.info).length) {
+                const grid = document.createElement('div');
+                grid.className = 'info-grid';
+                Object.entries(data.info).forEach(([key, value]) => {
+                    const item = document.createElement('div');
+                    item.className = 'info-item';
+                    const label = document.createElement('span');
+                    label.className = 'info-label';
+                    label.textContent = key.toUpperCase();
+                    const content = document.createElement('span');
+                    content.className = 'info-value';
+                    content.textContent = value;
+                    item.append(label, content);
+                    grid.append(item);
+                });
+                modalInfo.replaceChildren(grid);
             } else {
-                showNotification(`⚠️ 删除了 ${successCount}/${selectedImages.size} 张图片`, 'warning');
-                setTimeout(() => window.location.reload(), 1000);
+                const empty = document.createElement('p');
+                empty.className = 'info-value';
+                empty.textContent = '暂无作品参数。';
+                modalInfo.replaceChildren(empty);
             }
-        } catch (error) {
-            showNotification('❌ 批量删除失败', 'error');
-        }
-    });
-
-    // 切换批量模式
-    function toggleBatchMode(enable) {
-        const batchActions = document.getElementById('batchActions');
-        const normalActions = document.getElementById('normalActions');
-        const checkboxes = document.querySelectorAll('.batch-select-checkbox');
-
-        if (enable) {
-            batchActions.classList.remove('d-none');
-            batchActions.classList.add('d-flex');
-            normalActions.classList.add('d-none');
-            checkboxes.forEach(cb => cb.classList.remove('d-none'));
-        } else {
-            batchActions.classList.add('d-none');
-            batchActions.classList.remove('d-flex');
-            normalActions.classList.remove('d-none');
-            checkboxes.forEach(cb => cb.classList.add('d-none'));
-        }
-    }
-
-    // 监听复选框变化
-    document.querySelectorAll('.image-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const folder = this.dataset.folder;
-            if (this.checked) {
-                selectedImages.add(folder);
-            } else {
-                selectedImages.delete(folder);
-            }
-            updateCardSelection(folder, this.checked);
-            updateSelectedCount();
-        });
-    });
-
-    // 更新卡片选中状态
-    function updateCardSelection(folder, selected) {
-        const card = document.querySelector(`.gallery-card[data-folder="${folder}"]`);
-        if (card) {
-            if (selected) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
-            }
-        }
-    }
-
-    // 清除所有选择
-    function clearAllSelections() {
-        document.querySelectorAll('.image-checkbox').forEach(cb => {
-            cb.checked = false;
-            updateCardSelection(cb.dataset.folder, false);
-        });
-        updateSelectedCount();
-    }
-
-    // 更新选中计数
-    function updateSelectedCount() {
-        const countEl = document.getElementById('selectedCount');
-        if (countEl) {
-            countEl.textContent = selectedImages.size;
-        }
-    }
-
-    // 图片详情模态框
-    const modal = document.getElementById('imageModal');
-    const modalImage = document.getElementById('modalImage');
-    const modalImageName = document.getElementById('modalImageName');
-    const modalImageInfo = document.getElementById('modalImageInfo');
-    const modalDownloadBtn = document.getElementById('modalDownloadBtn');
-    const modalDeleteBtn = document.getElementById('modalDeleteBtn');
-
-    // 显示图片详情
-    document.querySelectorAll('.view-details').forEach(button => {
-        button.addEventListener('click', function() {
-            const imageData = JSON.parse(this.dataset.image);
-            currentFolder = this.dataset.folder;
-
-            modalImage.src = imageData.path;
-            modalImageName.textContent = imageData.name;
-            modalDownloadBtn.href = imageData.path;
-
-            // 显示图片信息
-            let infoHtml = '<div class="info-grid">';
-            if (imageData.info && Object.keys(imageData.info).length > 0) {
-                for (const [key, value] of Object.entries(imageData.info)) {
-                    infoHtml += `
-                        <div class="info-item">
-                            <span class="info-label">${key}:</span>
-                            <span class="info-value">${value}</span>
-                        </div>
-                    `;
-                }
-                infoHtml += '</div>';
-            } else {
-                infoHtml = '<p class="text-center text-secondary">暂无详细信息</p>';
-            }
-            modalImageInfo.innerHTML = infoHtml;
 
             modal.style.display = 'flex';
-            setTimeout(() => modal.classList.add('show'), 10);
+            requestAnimationFrame(() => modal.classList.add('show'));
+            document.getElementById('modalCloseBtn').focus();
+        }
+
+        document.getElementById('enableBatchMode')?.addEventListener('click', () => setBatchMode(true));
+        document.getElementById('batchCancel')?.addEventListener('click', () => setBatchMode(false));
+        document.getElementById('refreshGallery')?.addEventListener('click', () => location.reload());
+
+        document.querySelectorAll('.image-checkbox').forEach(box => box.addEventListener('change', () => {
+            box.checked ? selected.add(box.dataset.folder) : selected.delete(box.dataset.folder);
+            syncSelection();
+        }));
+
+        document.getElementById('batchSelectAll')?.addEventListener('click', () => {
+            const boxes = [...document.querySelectorAll('.image-checkbox')];
+            const selectAll = selected.size !== boxes.length;
+            boxes.forEach(box => {
+                box.checked = selectAll;
+                selectAll ? selected.add(box.dataset.folder) : selected.delete(box.dataset.folder);
+            });
+            syncSelection();
         });
-    });
 
-    // 删除按钮
-    document.querySelectorAll('.delete-image').forEach(button => {
-        button.addEventListener('click', async function() {
-            const folder = this.dataset.folder;
-            const galleryCard = this.closest('.gallery-card');
-
-            if (confirm(`确定要删除这张图片吗?\n文件夹: ${folder}`)) {
-                try {
-                    const response = await fetch('/api/gallery/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ folder_name: folder })
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        // 添加淡出动画
-                        galleryCard.style.opacity = '0';
-                        galleryCard.style.transform = 'scale(0.8)';
-                        setTimeout(() => {
-                            galleryCard.remove();
-                            // 如果画廊为空，刷新页面
-                            if (document.querySelectorAll('.gallery-card').length === 0) {
-                                window.location.reload();
-                            }
-                        }, 300);
-
-                        showNotification('✅ ' + data.message, 'success');
-                    } else {
-                        showNotification('❌ ' + data.message, 'error');
-                    }
-                } catch (error) {
-                    showNotification('❌ 删除失败', 'error');
-                }
-            }
+        document.getElementById('batchDelete')?.addEventListener('click', async () => {
+            if (!selected.size) return showNotification('请先选择要删除的作品', 'warning');
+            if (!confirm(`确定永久删除选中的 ${selected.size} 幅作品吗？`)) return;
+            const folders = [...selected];
+            const results = await Promise.allSettled(folders.map(deleteFolder));
+            const removed = results.filter(result => result.status === 'fulfilled').length;
+            showNotification(`已删除 ${removed} / ${folders.length} 幅作品`, removed === folders.length ? 'success' : 'warning');
+            setTimeout(() => location.reload(), 650);
         });
-    });
 
-    // 模态框中的删除按钮
-    modalDeleteBtn?.addEventListener('click', async function() {
-        if (!currentFolder) return;
-
-        if (confirm(`确定要删除这张图片吗?\n文件夹: ${currentFolder}`)) {
+        document.querySelectorAll('.view-details').forEach(button => button.addEventListener('click', () => showDetails(button)));
+        document.querySelectorAll('.delete-image').forEach(button => button.addEventListener('click', async () => {
+            const folder = button.dataset.folder;
+            if (!confirm('确定永久删除这幅作品吗？')) return;
             try {
-                const response = await fetch('/api/gallery/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_name: currentFolder })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    closeModal();
-                    setTimeout(() => window.location.reload(), 500);
-                    showNotification('✅ ' + data.message, 'success');
-                } else {
-                    showNotification('❌ ' + data.message, 'error');
-                }
+                await deleteFolder(folder);
+                const card = button.closest('.gallery-card');
+                card.style.opacity = '0';
+                card.style.transform = 'scale(.96)';
+                setTimeout(() => card.remove(), 280);
+                showNotification('作品已删除', 'success');
             } catch (error) {
-                showNotification('❌ 删除失败', 'error');
+                showNotification(error.message, 'error');
             }
-        }
-    });
+        }));
 
-    // 关闭模态框函数
-    window.closeModal = function() {
-        modal.classList.remove('show');
-        setTimeout(() => {
-            modal.style.display = 'none';
-        }, 300);
-    };
+        document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
+            if (!currentFolder || !confirm('确定永久删除这幅作品吗？')) return;
+            try {
+                await deleteFolder(currentFolder);
+                closeModal();
+                showNotification('作品已删除', 'success');
+                setTimeout(() => location.reload(), 500);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            }
+        });
 
-    // 点击模态框背景关闭
-    modal?.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
-
-    // ESC键关闭模态框
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.style.display === 'flex') {
-            closeModal();
-        }
-    });
-});
+        document.getElementById('modalCloseBtn')?.addEventListener('click', closeModal);
+        modal?.addEventListener('click', event => { if (event.target === modal) closeModal(); });
+        document.addEventListener('keydown', event => { if (event.key === 'Escape' && modal?.classList.contains('show')) closeModal(); });
+    })();
 </script>
-
-<style>
-/* ==================== 面包屑导航 ==================== */
-.breadcrumb-nav {
-    padding: 1rem 1.5rem;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-md);
-    border-left: 4px solid var(--primary-color);
-}
-
-.breadcrumb-item {
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 0.95rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: var(--transition);
-}
-
-.breadcrumb-item:hover {
-    color: var(--primary-color);
-}
-
-.breadcrumb-item.active {
-    color: var(--primary-color);
-    font-weight: 600;
-}
-
-.breadcrumb-separator {
-    color: var(--text-tertiary);
-    font-size: 0.75rem;
-}
-
-/* ==================== 统计徽章 ==================== */
-.gallery-stats {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.stat-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: var(--primary-light);
-    color: var(--primary-color);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    font-weight: 600;
-    border: 1px solid var(--primary-color);
-}
-
-.gallery-page {
-    animation: fadeIn 0.5s ease;
-}
-
-.gallery-header {
-    margin-bottom: 2rem;
-}
-
-.gallery-header h1 {
-    color: var(--primary-color);
-    margin-bottom: 0.5rem;
-}
-
-.subtitle {
-    color: var(--text-secondary);
-    font-size: 1.1rem;
-}
-
-.gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
-    animation: slideUp 0.5s ease;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.gallery-card {
-    background: var(--card-bg);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--border-color);
-    transition: var(--transition);
-    position: relative;
-}
-
-.gallery-card:hover {
-    transform: translateY(-8px);
-    box-shadow: var(--shadow-lg);
-}
-
-.gallery-card.selected {
-    border: 2px solid var(--primary-color);
-    box-shadow: 0 0 0 4px var(--primary-light);
-}
-
-/* 批量选择复选框 */
-.batch-select-checkbox {
-    position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
-    z-index: 10;
-    background: var(--card-bg);
-    padding: 0.5rem;
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-}
-
-.batch-select-checkbox input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-.gallery-image-wrapper {
-    position: relative;
-    aspect-ratio: 1;
-    overflow: hidden;
-    background: var(--bg-tertiary);
-}
-
-.gallery-image-wrapper img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.5s ease;
-}
-
-.gallery-card:hover .gallery-image-wrapper img {
-    transform: scale(1.1);
-}
-
-/* 快捷操作按钮 - 始终可见 */
-.gallery-quick-actions {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    z-index: 10;
-}
-
-.btn-quick-action {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    box-shadow: var(--shadow-md);
-    opacity: 0.9;
-    transition: var(--transition);
-}
-
-.btn-quick-action:hover {
-    opacity: 1;
-    transform: scale(1.1);
-}
-
-.gallery-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: var(--transition);
-}
-
-.gallery-card:hover .gallery-overlay {
-    opacity: 1;
-}
-
-.overlay-buttons {
-    display: flex;
-    gap: 0.75rem;
-    animation: scaleIn 0.3s ease;
-}
-
-@keyframes scaleIn {
-    from {
-        transform: scale(0.8);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-.overlay-buttons .btn {
-    width: 45px;
-    height: 45px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-}
-
-.gallery-info {
-    padding: 1.25rem;
-    background: var(--card-bg);
-}
-
-.gallery-info h4 {
-    margin: 0 0 0.75rem 0;
-    font-size: 1rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* 增强的元数据显示 */
-.image-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-}
-
-.meta-item i {
-    color: var(--text-tertiary);
-    width: 16px;
-    text-align: center;
-}
-
-.empty-gallery {
-    text-align: center;
-    padding: 4rem 2rem;
-    animation: fadeIn 0.5s ease;
-}
-
-.empty-content i {
-    color: var(--text-tertiary);
-    margin-bottom: 1.5rem;
-    opacity: 0.3;
-}
-
-.empty-content h2 {
-    margin: 1rem 0;
-    color: var(--text-primary);
-}
-
-.empty-content p {
-    color: var(--text-secondary);
-    margin-bottom: 2rem;
-}
-
-/* 模态框样式 */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
-    z-index: 10000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.modal.show {
-    opacity: 1;
-}
-
-.modal-dialog {
-    width: 100%;
-    max-width: 1000px;
-    animation: modalSlideIn 0.3s ease;
-}
-
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: scale(0.9) translateY(-30px);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-    }
-}
-
-.modal-content {
-    background: var(--card-bg);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-}
-
-.modal-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.modal-header h3 {
-    margin: 0;
-    color: var(--text-primary);
-}
-
-.modal-close-btn {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: var(--text-secondary);
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-sm);
-    transition: var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-close-btn:hover {
-    background: var(--bg-primary);
-    color: var(--danger-color);
-}
-
-.modal-body {
-    display: flex;
-    max-height: 70vh;
-    overflow: hidden;
-}
-
-@media (max-width: 768px) {
-    .modal-body {
-        flex-direction: column;
-    }
-}
-
-.modal-image-section {
-    flex: 1;
-    background: var(--bg-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    min-height: 400px;
-}
-
-.modal-image-section img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    border-radius: var(--radius-md);
-}
-
-.modal-info-section {
-    flex: 1;
-    padding: 2rem;
-    overflow-y: auto;
-    max-width: 400px;
-    background: var(--card-bg);
-}
-
-.modal-info-section h4 {
-    margin: 0 0 1.5rem 0;
-    color: var(--primary-color);
-    padding-bottom: 1rem;
-    border-bottom: 2px solid var(--border-color);
-}
-
-.image-details {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.info-grid {
-    display: grid;
-    gap: 1rem;
-}
-
-.info-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.75rem;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-    border-left: 3px solid var(--primary-color);
-}
-
-.info-label {
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-}
-
-.info-value {
-    color: var(--text-primary);
-    word-break: break-word;
-}
-
-.modal-footer {
-    padding: 1.5rem;
-    border-top: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
-}
-
-.modal-actions {
-    flex-wrap: wrap;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-    .breadcrumb-nav {
-        padding: 0.75rem 1rem;
-    }
-
-    .gallery-header h1 {
-        font-size: 1.5rem;
-    }
-
-    .subtitle {
-        font-size: 0.95rem;
-    }
-
-    .gallery-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 0.75rem;
-    }
-
-    .gallery-info {
-        padding: 0.875rem;
-    }
-
-    .gallery-info h4 {
-        font-size: 0.9rem;
-    }
-
-    .image-meta {
-        gap: 0.35rem;
-    }
-
-    .meta-item {
-        font-size: 0.75rem;
-    }
-
-    .overlay-buttons .btn {
-        width: 40px;
-        height: 40px;
-    }
-
-    .batch-select-checkbox {
-        top: 0.5rem;
-        left: 0.5rem;
-    }
-
-    .btn-quick-action {
-        width: 36px;
-        height: 36px;
-    }
-
-    .modal {
-        padding: 0.5rem;
-    }
-
-    .modal-header {
-        padding: 1rem;
-    }
-
-    .modal-header h3 {
-        font-size: 1.1rem;
-    }
-
-    .modal-body {
-        flex-direction: column;
-        max-height: 80vh;
-    }
-
-    .modal-image-section {
-        padding: 1rem;
-        min-height: 250px;
-    }
-
-    .modal-info-section {
-        max-width: none;
-        padding: 1rem;
-    }
-
-    .modal-info-section h4 {
-        font-size: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .modal-footer {
-        padding: 1rem;
-    }
-
-    .modal-actions {
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-
-    .modal-actions .btn {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .gallery-actions {
-        flex-direction: column;
-        width: 100%;
-    }
-
-    .gallery-actions .btn {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .batch-actions, .normalActions {
-        width: 100%;
-        flex-direction: column;
-    }
-}
-
-/* 小屏手机优化 */
-@media (max-width: 480px) {
-    .gallery-grid {
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        gap: 0.5rem;
-    }
-
-    .overlay-buttons {
-        gap: 0.5rem;
-    }
-
-    .overlay-buttons .btn {
-        width: 36px;
-        height: 36px;
-        font-size: 0.85rem;
-    }
-}
-</style>
 {% endblock %}

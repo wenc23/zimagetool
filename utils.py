@@ -10,6 +10,15 @@ from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
 
+# Windows 非 UTF-8 控制台无法编码 emoji 时不应让应用启动失败。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def ensure_directory(directory: Union[str, Path]) -> Path:
     """
     确保目录存在
@@ -36,9 +45,52 @@ def validate_file_extension(filename: str, allowed_extensions: Tuple[str, ...] =
     Returns:
         验证后的文件名
     """
+    if not isinstance(filename, str):
+        raise ValueError("文件名必须是字符串")
+
+    filename = filename.strip()
+    if not filename or len(filename) > 128:
+        raise ValueError("文件名不能为空且不能超过128个字符")
+    if filename in {'.', '..'} or '/' in filename or '\\' in filename:
+        raise ValueError("文件名不能包含路径")
+    if (filename != filename.rstrip(' .')
+            or any(ord(char) < 32 for char in filename)
+            or any(char in '<>:"|?*' for char in filename)):
+        raise ValueError("文件名包含无效字符")
+
     if not any(filename.lower().endswith(ext) for ext in allowed_extensions):
         filename += '.png'
+
+    path = Path(filename)
+    base_name = path.stem
+    if not base_name or base_name in {'.', '..'}:
+        raise ValueError("文件名无效")
+
+    windows_reserved = {'CON', 'PRN', 'AUX', 'NUL'}
+    windows_reserved.update(f'COM{i}' for i in range(1, 10))
+    windows_reserved.update(f'LPT{i}' for i in range(1, 10))
+    if base_name.upper() in windows_reserved:
+        raise ValueError("文件名是系统保留名称")
+
     return filename
+
+
+def validate_integer(name: str, value: Any, minimum: int, maximum: int,
+                     multiple_of: Optional[int] = None) -> int:
+    """验证来自 API 的整数，显式拒绝布尔值和越界资源参数。"""
+    if isinstance(value, bool):
+        raise ValueError(f"{name}必须是整数")
+    try:
+        integer = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name}必须是整数") from None
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{name}必须是整数")
+    if not minimum <= integer <= maximum:
+        raise ValueError(f"{name}必须在{minimum}到{maximum}之间")
+    if multiple_of and integer % multiple_of != 0:
+        raise ValueError(f"{name}必须是{multiple_of}的倍数")
+    return integer
 
 
 def format_timestamp(timestamp: Optional[datetime.datetime] = None,

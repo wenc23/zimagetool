@@ -61,11 +61,11 @@ def check_python_version():
     python_version = platform.python_version_tuple()
     major, minor = int(python_version[0]), int(python_version[1])
 
-    if major >= 3 and minor >= 8:
+    if major > 3 or (major == 3 and minor >= 10):
         print_success(f"Python版本: {platform.python_version()} (符合要求)")
         return True
     else:
-        print_error(f"Python版本: {platform.python_version()} (需要3.8+)")
+        print_error(f"Python版本: {platform.python_version()} (需要3.10+)")
         return False
 
 
@@ -113,7 +113,7 @@ def check_pillow_specifically():
 
         if version != "unknown":
             # 检查版本是否满足要求
-            min_version = "9.0.0"
+            min_version = "11.3.0"
             try:
                 current_parts = [int(x) for x in version.split('.') if x.isdigit()]
                 min_parts = [int(x) for x in min_version.split('.') if x.isdigit()]
@@ -138,7 +138,6 @@ def check_requirements(status):
     requirements = {
         "torch": "2.9.0+cu126",
         "diffusers": "0.36.0.dev0",
-        "gradio": "6.0.2",
         "transformers": "4.57.3",
         "accelerate": "1.12.0",
         "requests": "2.32.5"
@@ -157,7 +156,7 @@ def check_requirements(status):
             print_success("PIL: 已安装 (版本未知)")
     else:
         print_error(f"PIL: {pillow_version}")
-        status.missing_deps.append(("PIL", "9.0.0"))
+        status.missing_deps.append(("PIL", "11.3.0"))
         all_passed = False
 
     # 检查其他依赖包
@@ -248,7 +247,7 @@ def suggest_installation_commands(status):
     # 1. Python版本问题
     if not status.python_ok:
         suggestions.append(("🔧 1. 解决Python版本问题:", [
-            "请安装Python 3.8或更高版本",
+            "请安装Python 3.10或更高版本",
             "下载地址: https://www.python.org/downloads/"
         ]))
 
@@ -277,7 +276,7 @@ def suggest_installation_commands(status):
 
             if missing_packages:
                 deps_suggestions.append(f"缺失的包: {', '.join(missing_packages)}")
-                deps_suggestions.append(f"安装命令: {pip_cmd} install {' '.join(missing_packages)}")
+                deps_suggestions.append(f"安装命令: {sys.executable} -m pip install -r requirements.txt")
 
         # 版本过旧的依赖包（处理PIL包名映射）
         if status.outdated_deps:
@@ -290,7 +289,7 @@ def suggest_installation_commands(status):
 
             if outdated_packages:
                 deps_suggestions.append(f"需要更新的包: {', '.join(outdated_packages)}")
-                deps_suggestions.append(f"更新命令: {pip_cmd} install --upgrade {' '.join(outdated_packages)}")
+                deps_suggestions.append(f"更新命令: {sys.executable} -m pip install --upgrade -r requirements.txt")
 
         if deps_suggestions:
             suggestions.append(("🔧 3. 解决依赖包问题:", deps_suggestions))
@@ -300,7 +299,7 @@ def suggest_installation_commands(status):
         pytorch_suggestions = []
         if status.cuda_available:
             pytorch_suggestions.append("GPU版本 (推荐):")
-            pytorch_suggestions.append(f"{pip_cmd} install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
+            pytorch_suggestions.append(f"{sys.executable} -m pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126")
         else:
             pytorch_suggestions.append("CPU版本:")
             pytorch_suggestions.append(f"{pip_cmd} install torch torchvision torchaudio")
@@ -311,8 +310,7 @@ def suggest_installation_commands(status):
     if any(pkg == "diffusers" for pkg, _ in status.missing_deps + status.outdated_deps):
         suggestions.append(("🔧 5. diffusers安装建议:", [
             "必须从源码安装以支持Z-Image:",
-            f"{pip_cmd} uninstall diffusers",
-            f"{pip_cmd} install git+https://github.com/huggingface/diffusers"
+            f"{sys.executable} -m pip install --upgrade -r requirements.txt"
         ]))
 
     # 6. 可选依赖（始终显示，但标记为可选）
@@ -332,9 +330,7 @@ def suggest_installation_commands(status):
     # 8. 一键安装命令（仅在需要时显示）
     if status.missing_deps or status.outdated_deps or not status.model_ok:
         suggestions.append(("🔧 8. 一键安装所有依赖:", [
-            f"{pip_cmd} install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130" if status.os_type == "windows" else f"{pip_cmd} install torch torchvision torchaudio",
-            f"{pip_cmd} install --upgrade git+https://github.com/huggingface/diffusers transformers accelerate",
-            f"{pip_cmd} install gradio pillow requests aiofiles colorama huggingface_hub"
+            f"{sys.executable} -m pip install -r requirements.txt"
         ]))
 
     # 按优先级显示建议
@@ -389,55 +385,14 @@ def check_environment():
 def auto_fix_dependencies():
     """自动修复依赖问题"""
     print_section("🛠️ 尝试自动修复依赖", width=60)
-
-    status = EnvironmentStatus()
-    status.os_type = platform.system().lower()
-
     try:
-        # 检查当前状态
-        check_requirements(status)
-
-        # 根据操作系统选择命令
-        pip_cmd = "pip" if status.os_type == "windows" else "pip3"
-
-        # 安装基础依赖
-        commands = [
-            f"{pip_cmd} install --upgrade pip",
-        ]
-
-        # 根据缺失的包添加特定命令（处理PIL包名映射）
-        missing_packages = []
-        for pkg, _ in status.missing_deps:
-            if pkg == "PIL":
-                missing_packages.append("pillow")
-            else:
-                missing_packages.append(pkg)
-
-        if missing_packages:
-            commands.append(f"{pip_cmd} install {' '.join(missing_packages)}")
-
-        # 特殊处理PyTorch
-        if "torch" in [pkg for pkg, _ in status.missing_deps]:
-            if status.os_type == "windows":
-                commands.append(f"{pip_cmd} install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130")
-            else:
-                commands.append(f"{pip_cmd} install torch torchvision torchaudio")
-
-        # 特殊处理diffusers
-        if "diffusers" in [pkg for pkg, _ in status.missing_deps]:
-            commands.append(f"{pip_cmd} uninstall diffusers")
-            commands.append(f"{pip_cmd} install git+https://github.com/huggingface/diffusers")
-
-        # 安装可选依赖
-        commands.append(f"{pip_cmd} install aiofiles colorama huggingface_hub")
-
-        for cmd in commands:
-            print_info(f"执行: {cmd}")
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            if result.returncode == 0:
-                print_success("执行成功")
-            else:
-                print_error(f"执行失败: {result.stderr}")
+        command = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        print_info(f"执行: {' '.join(command)}")
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            print_success("依赖安装成功")
+        else:
+            print_error(f"依赖安装失败: {result.stderr}")
 
     except Exception as e:
         print_error(f"自动修复失败: {e}")

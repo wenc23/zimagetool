@@ -6,7 +6,7 @@ echo "========================================"
 
 # 检查Python环境
 if ! command -v python3 &> /dev/null; then
-    echo "❌ 未找到Python3，请先安装Python 3.8+"
+    echo "❌ 未找到Python3，请先安装Python 3.10+"
     exit 1
 fi
 
@@ -22,9 +22,9 @@ fi
 
 # 检查依赖
 echo "📦 检查依赖包..."
-if ! python3 -c "import flask" &> /dev/null; then
-    echo "⚠️ Flask未安装，正在安装依赖..."
-    pip install -r requirements.txt
+if ! python3 -c "import flask, torch, diffusers, transformers, accelerate, PIL, requests" &> /dev/null; then
+    echo "⚠️ 依赖不完整，正在安装已锁定的依赖..."
+    python3 -m pip install -r requirements.txt || exit 1
 else
     echo "✅ 依赖包已安装"
 fi

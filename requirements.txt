@@ -2,22 +2,22 @@
 # 更新日期: 2026-01-01
 
 # Flask Web框架
-Flask==2.3.3
-Werkzeug==2.3.7
+Flask==3.1.2
+Werkzeug==3.1.4
 
 # 核心AI依赖
 torch==2.9.0
 torchvision==0.24.0
 torchaudio==2.9.0
-diffusers @ git+https://github.com/huggingface/diffusers
-transformers==4.36.2
-accelerate==0.25.0
+diffusers @ git+https://github.com/huggingface/diffusers@759ea587082aa0e77449952d8f3523f28ddc61f3
+transformers==4.57.3
+accelerate==1.12.0
 
 # 图片处理
-Pillow==10.1.0
+Pillow==11.3.0
 
 # 网络请求
-requests==2.31.0
+requests==2.32.5
 
 # 可选依赖（推荐安装）
 aiofiles>=23.0.0

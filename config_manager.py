@@ -29,18 +29,11 @@ class AppConfig:
 
     # 文件路径配置
     gallery_dir: str = "gallery"
+    gallery_page_size: int = 24
     offload_folder: str = "offload"
 
-    # 性能配置
-    enable_attention_slicing: bool = True
-    attention_slicing_size: str = "max"
-
-    # Web UI配置
-    webui_port: int = 7860
-    webui_share: bool = False
-
     # Flask配置
-    flask_host: str = "0.0.0.0"
+    flask_host: str = "127.0.0.1"
     flask_port: int = 5000
     flask_debug: bool = False
 
@@ -65,6 +58,12 @@ class ConfigManager:
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+
+                # 兼容旧版 Gradio 配置名；新配置统一使用 flask_*。
+                if "flask_port" not in data and "webui_port" in data:
+                    data["flask_port"] = data["webui_port"]
+                if data.get("default_optimization_mode") == "lowvram":
+                    data["default_optimization_mode"] = "low_vram"
 
                 # 更新配置
                 for key, value in data.items():
@@ -154,6 +153,45 @@ class ConfigManager:
         if model_path:
             self.config.model_path = model_path
             print(f"✅ 从环境变量加载模型路径: {model_path}")
+
+        flask_host = os.environ.get('FLASK_HOST')
+        if flask_host:
+            self.config.flask_host = flask_host
+
+        flask_port = os.environ.get('FLASK_PORT')
+        if flask_port:
+            try:
+                port = int(flask_port)
+                if not 1 <= port <= 65535:
+                    raise ValueError
+                self.config.flask_port = port
+            except ValueError:
+                print(f"⚠️ 忽略无效的 FLASK_PORT: {flask_port}")
+
+        flask_debug = os.environ.get('FLASK_DEBUG')
+        if flask_debug:
+            self.config.flask_debug = flask_debug.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+        numeric_settings = {
+            'DEFAULT_WIDTH': ('default_width', 256, 4096),
+            'DEFAULT_HEIGHT': ('default_height', 256, 4096),
+            'DEFAULT_STEPS': ('default_steps', 4, 20),
+        }
+        for env_name, (config_name, minimum, maximum) in numeric_settings.items():
+            raw_value = os.environ.get(env_name)
+            if raw_value is None:
+                continue
+            try:
+                value = int(raw_value)
+                if not minimum <= value <= maximum:
+                    raise ValueError
+                setattr(self.config, config_name, value)
+            except ValueError:
+                print(f"⚠️ 忽略无效的 {env_name}: {raw_value}")
+
+        gallery_dir = os.environ.get('GALLERY_DIR')
+        if gallery_dir:
+            self.config.gallery_dir = gallery_dir
 
     def get_all(self) -> Dict[str, Any]:
         """获取所有配置"""
